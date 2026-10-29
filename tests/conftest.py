@@ -78,6 +78,21 @@ def _status_toggles_start_at_defaults():
 
 
 @pytest.fixture(autouse=True)
+def _surface_format_given_back():
+    """main._configure_surface_format() sets the application's default GL
+    format -- MSAA and the swap interval -- for every window created after
+    it. Two tests that check it left multisampling on for the rest of their
+    process, and the UCS axes test, landing after one of them when the
+    files were dealt anew, found its red axis blended into another colour
+    on the CI. Each test gets back the format it found."""
+    gui = sys.modules.get("PySide6.QtGui")
+    original = gui.QSurfaceFormat.defaultFormat() if gui is not None else None
+    yield
+    if original is not None:
+        gui.QSurfaceFormat.setDefaultFormat(original)
+
+
+@pytest.fixture(autouse=True)
 def _let_closed_windows_go():
     """A closed MainWindow deletes itself (WA_DeleteOnClose), but only when
     the event loop next turns -- and a test that closes its window last

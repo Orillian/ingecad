@@ -1,5 +1,95 @@
 # Changelog
 
+## v0.6.9 — 2026-10-29
+
+An assistant that draws with the same commands you type, off until you
+turn it on; what a tester found in a long session, fixed; layer groups;
+and three new languages.
+
+### The AI assistant and the MCP bridge (off by default)
+- **An Assistant tab** in the right sidebar talks to a model of your
+  choice (cloud providers with your own key, or a local one) and works
+  on the drawing through the same actions as the command line: it draws,
+  queries, selects and edits, each step shown in the command history as
+  `AI: …`, and a whole turn undoes with one U. Erasing many objects,
+  overwriting a file or opening another asks first.
+- **`ingecad --mcp`** lets an MCP client (a desktop assistant or a code
+  editor) drive the open drawing over a local socket with a private
+  token; `MCPSTART`/`MCPSTOP` and Tools ▸ Options ▸ AI Assistant turn it
+  on and off, and copy the client configuration.
+- **API keys live in the system keyring**, never in the settings or the
+  drawing. The first time something goes to a cloud provider, a notice
+  says what is sent. With both switches off nothing is loaded.
+- How to connect each client and what leaves the machine:
+  `docs/ai.md`.
+
+### Layer groups
+- **The layer groups and property filters a drawing carries show in the
+  Layers tab**, as a tree above the table: pick one to see its layers,
+  right click to turn them on/off, freeze/thaw or lock/unlock together.
+- **Make, rename, fill and delete groups**: New Group Filter, drag layers
+  onto a group, or right click layers ▸ Add to group / New group with
+  these layers / Remove from group. Every change undoes.
+- **Save as DWG keeps the groups and their layers**; deleting or purging
+  a layer and undoing brings it back to its groups.
+
+### Dimensions
+- **A dimension too narrow for its text takes the arrowheads outside
+  with it**; text set Outside the part, and a leader line that follows
+  slid text.
+- **A radius with its text inside starts at the centre**, and keeps the
+  text where the user placed it when it is redrawn. DIMJOGGED points at
+  the true centre with a wide jog, steepens when the jog has no room,
+  and draws no centre mark at the centre it stands in for.
+- **Dragging the text of a dimension read from the file leaves one
+  dimension**: its old picture no longer stays on screen beside it.
+- **An angle's text sits above its arc as it is read** (ISO 129), and an
+  extension line reaches the vertex when the arc is beyond it.
+- **Arrow 1 and Arrow 2 in Properties** for one dimension; picking an
+  arrowhead in the dimension style editor changes the arrows.
+- **Vertical and rotated dimensions keep their rotation in the DWG**,
+  and the rotation an older Save as DWG took is given back on open.
+- The dimension preview no longer ends up in the drawing (#108).
+
+### Drawing and editing
+- **Arithmetic in any number or coordinate typed at a prompt**
+  (`43.3/3`, `123+45,40/2`, `@20*2<45`).
+- **TRIM with every object as an edge takes only what is on screen**:
+  lines on a layer turned off or frozen no longer cut.
+- **Object snap takes the point under the cursor**: an intersection
+  beats an endpoint a few pixels farther away, and CEN snaps from the
+  arc or circle itself.
+- **XLINE and RAY**: endless at any zoom (#104), take object snaps, and
+  OFFSET makes a parallel line of their own kind.
+- **BATTMAN**: changes reach the inserted blocks; it sits by ATTDEF in
+  the menu.
+- **Right click ▸ Symbol** while editing text, as in MTEXT.
+- **The first annotation scale change of a new drawing reaches its
+  objects.**
+
+### Interface
+- **A toolbar you hide stays hidden at the next start** (#107).
+- **Window colours chosen in one tab reach the drawings opened later**
+  (#81).
+- **An untouched template stays in metres when Options is accepted**
+  (#93).
+
+### Speed
+- **Undoing a big erase on a plan with heavy blocks no longer freezes**
+  (2.3 s → 0.07 s): the size of an edit is counted in drawing work.
+- **Ctrl+V on a plan with a warm snap index** 0.95 → 0.30 s, and a
+  collection backlog no longer lands on the next Ctrl+X (0.92 → 0.26 s).
+
+### Languages
+- **Portuguese (Portugal and Brazil) and Korean**, contributed by users.
+
+### Known limitations
+- A DWG saved by IngeCAD may ask to be recovered when opened in other
+  CAD programs, which then drop its visual styles and multileader
+  styles, and with them the layer group tree. IngeCAD and other readers
+  open it whole; the fix lives in the DWG writer and is for the next
+  release.
+
 ## v0.6.8.2 — 2026-10-21
 
 - **Plot opens again in a layout whose page setup has a scale outside

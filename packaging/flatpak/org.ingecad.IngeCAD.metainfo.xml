@@ -86,6 +86,12 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="0.6.9" date="2026-10-29">
+      <description>
+        <p>An AI assistant, off by default, that draws and edits through the same commands you type, and an MCP bridge for desktop assistants. Layer groups in the Layers tab, kept in Save as DWG. Arithmetic in typed numbers and coordinates. Dimensions to the drafting norm: narrow ones take their arrows outside, radii start at the centre, jogged radii point at the true centre. Object snap takes the point under the cursor, TRIM ignores hidden layers, endless construction lines, and Portuguese and Korean translations.</p>
+        <p xml:lang="es">Un asistente de IA, apagado por defecto, que dibuja y edita con las mismas órdenes que se teclean, y un puente MCP para asistentes de escritorio. Grupos de capas en la pestaña Capas, conservados al guardar como DWG. Aritmética en los números y coordenadas tecleados. Cotas según la norma: las angostas sacan las flechas, los radios arrancan en el centro, el radio con recodo apunta al centro verdadero. La referencia a objetos toma el punto bajo el cursor, RECORTA ignora las capas ocultas, líneas auxiliares sin fin, y traducciones al portugués y al coreano.</p>
+      </description>
+    </release>
     <release version="0.6.8.2" date="2026-10-21">
       <description>
         <p>Plot opens again in a layout whose page setup uses a scale outside the list.</p>

@@ -31,7 +31,7 @@ and IngePresupuestos (construction budgeting).
   trim/offset/extend, survey points with elevations, and printing to scale.
   Not a feature-for-feature clone of any other CAD.
 
-## Status — v0.6.8.2
+## Status — v0.6.9
 
 What works today:
 
@@ -95,8 +95,14 @@ What works today:
   and a colleague's dimensions keep their author's text, number and
   position when edited, moved, rotated or mirrored.
 - **Layers, the classic way**: the properties table (status, on, freeze, lock,
-  colour, linetype, lineweight, plot, description) with live search, and the
-  `-LAYER` command line with wildcards for the keyboard-only flow.
+  colour, linetype, lineweight, plot, description) with live search, the
+  `-LAYER` command line with wildcards for the keyboard-only flow, and the
+  **layer groups** and property filters of the drawing as a tree — made,
+  filled and switched on/off together, kept in Save as DWG.
+- **An AI assistant, off by default**: a sidebar tab that draws, queries and
+  edits through the same commands you type (one U undoes its whole turn),
+  with the model and key of your choice, and `ingecad --mcp` for an MCP
+  client to drive the open drawing (`docs/ai.md`).
 - **Editing**: ERASE / MOVE / COPY / ROTATE / SCALE / MIRROR / OFFSET
   (polylines and arcs included, distance by mouse) / TRIM / EXTEND / FILLET /
   CHAMFER / STRETCH / BREAK / JOIN / ARRAY / MATCHPROP / PEDIT (Join turns
@@ -119,8 +125,8 @@ What works today:
   Drafting Settings), a user coordinate system (UCS: moved and turned
   origin, named, Previous, Object) that typed points, the grid and the
   commands follow, the nested adaptive grid with GRIDUNIT / SNAPUNIT
-  saved in the drawing, absolute / relative / polar coordinate input and
-  LASTPOINT, command prefix autocomplete (`OFF` runs OFFSET), inquiry
+  saved in the drawing, absolute / relative / polar coordinate input (with arithmetic:
+  `43.3/3`, `@20*2<45`) and LASTPOINT, command prefix autocomplete (`OFF` runs OFFSET), inquiry
   commands (DIST / ID / AREA / LIST), UNITS, blocks (`B` / `I`), a startup
   window with template units and recent drawings with thumbnails, and
   undo/redo of everything.

@@ -17,6 +17,18 @@ With contributions from (Help ▸ About IngeCAD rolls the same list):
   Riccardo Gagliarducci — the polyline OFFSET report (#58).
   batoceragaming — the Window plot area (#52) and the AppImage (#55).
   javierrondont — DXF export (#51).
+  Arq. Fernando Pablo Bellocchio (archibello) — GeoCad Yaguareté, the
+      IngeCAD↔QGIS plug-in whose patches found a dozen faults of ours;
+      the ghost dimension fix (#108, #109).
+  Phornjed Ph. (buildsmart888) — the AI assistant and MCP bridge proposal
+      the built-in assistant grew from (#59).
+  Orian Beltrame (orianbsilva) — the test suite on Windows; templates
+      that stay in metres (#93, #94).
+  JMArts Design (jmartsdesign) — Portuguese (Portugal) translation (#56).
+  Henrique Enzweiler (riqueenz) — Portuguese (Brazil) translation (#92).
+  ultracat — Korean translation (#113).
+  Uthopik — the construction lines that ended at the edge of the screen (#98, #104).
+  stephenboullion — asked for toolbars that stay hidden (#107).
   Jozsef — the AppImage that would not start (#20).
 
 And thanks to everyone who tries IngeCAD and reports what they find.

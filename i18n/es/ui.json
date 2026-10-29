@@ -2182,5 +2182,13 @@
   "Add to group": "Añadir al grupo",
   "New group with these layers": "Nuevo grupo con estas capas",
   "Remove from group": "Quitar del grupo",
-  "Group Filter{n}": "Filtro de grupo{n}"
+  "Group Filter{n}": "Filtro de grupo{n}",
+  "GeoCad Yaguareté, the plug-in between IngeCAD and QGIS, whose patches found a dozen faults of ours; and the ghost dimension fix.": "GeoCad Yaguareté, el complemento entre IngeCAD y QGIS, cuyos parches encontraron una docena de fallos nuestros; y el arreglo de las cotas fantasma.",
+  "The AI assistant and MCP bridge proposal the built-in assistant grew from.": "La propuesta de asistente de IA y puente MCP de la que nació el asistente incluido.",
+  "The test suite on Windows, and templates that stay in metres.": "La batería de pruebas en Windows, y las plantillas que siguen en metros.",
+  "Portuguese (Portugal) translation of the interface and the plug-ins.": "Traducción al portugués (Portugal) de la interfaz y los complementos.",
+  "Portuguese (Brazil) translation of the interface.": "Traducción al portugués (Brasil) de la interfaz.",
+  "Korean translation of the interface.": "Traducción al coreano de la interfaz.",
+  "The construction lines that ended at the edge of the screen.": "Las líneas auxiliares que terminaban en el borde de la pantalla.",
+  "Asked for toolbars that stay hidden.": "Pidió barras de herramientas que se queden ocultas."
 }

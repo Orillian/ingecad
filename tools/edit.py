@@ -159,8 +159,29 @@ class CopyTool(_DisplacementTool):
         self._ask_more()
 
 
+def _units_text(ctx, value: float, kind: str) -> str:
+    """A value as the drawing writes it (LUNITS/LUPREC, AUNITS/AUPREC):
+    AutoCAD's ``<30>`` and ``<1.0000>`` at a default."""
+    from core import units as units_mod
+
+    try:
+        u = ctx.services.units()
+        if kind == "angle":
+            return units_mod.format_angle(value, u.aunits, u.auprec)
+        return units_mod.format_length(value, u.lunits, u.luprec)
+    except Exception:  # noqa: BLE001 -- no drawing units: AutoCAD's default
+        return f"{value:g}" if kind == "angle" else f"{value:.4f}"
+
+
 class RotateTool(Tool):
+    """ROTATE as AutoCAD 2026 asks for it (group E): the angle prompt
+    offers the last angle as its default and Enter takes it; Reference asks
+    "the reference angle <0>" and "the new angle or [Points] <0>", typed,
+    picked or by two points, and remembers new - reference."""
+
     wants_selection = True
+    #: the last rotation, ROTATE's default for the rest of the session
+    angle = 0.0
 
     def start(self) -> None:
         self.name = "ROTATE"
@@ -168,7 +189,27 @@ class RotateTool(Tool):
         self._base: Point | None = None
         self._reference: float | None = None
         self._ref_first: Point | None = None
+        self._phase = "angle"     # angle | reference | new | points
+        self._points_first: Point | None = None
         self._copy = False
+
+    def _text(self, value: float) -> str:
+        return _units_text(self.ctx, value, "angle")
+
+    def _ask_angle(self) -> None:
+        self._phase = "angle"
+        self.prompt("Specify rotation angle or [Copy/Reference] <{a}>:",
+                    a=self._text(type(self).angle))
+
+    def _ask_new(self) -> None:
+        self._phase = "new"
+        self.prompt("Specify the new angle or [Points] <{a}>:", a=self._text(0.0))
+
+    def _rotate(self, angle: float) -> None:
+        type(self).angle = angle % 360.0
+        self.ctx.execute(actions.rotate_entities(
+            self._entities, self._base, angle, copy=self._copy))
+        self.ctx.finish()
 
     def on_selection(self, entities: list) -> None:
         if not entities:
@@ -182,36 +223,48 @@ class RotateTool(Tool):
         # AutoCAD's _global form, into the English key the
         # branches below have always compared against.
         t = self.option(text) or text.upper()
-        if t == "C" and self._base is not None and self._reference is None:
+        if self._base is None:
+            return False
+        if self._phase == "angle" and t == "C":
             # Copy: the originals stay, a rotated copy is made (p.1588)
             self._copy = True
             self.ctx.echo(tr("Rotating a copy of the selected objects."))
-            self.prompt("Specify rotation angle or [Copy/Reference]:")
+            self._ask_angle()
             return True
-        if t in ("R", "REFERENCE") and self._base is not None:
-            self._reference = -1.0  # waiting for reference angle
-            self.prompt("Specify reference angle (two points or typed):")
+        if self._phase == "angle" and t in ("R", "REFERENCE"):
+            self._phase = "reference"
+            self.prompt("Specify the reference angle <{a}>:", a=self._text(0.0))
             return True
-        # typed angle
-        if self._base is not None:
-            try:
-                angle = float(text)
-            except ValueError:
-                return False
-            if self._reference == -1.0:
-                self._reference = angle
-                self.prompt("Specify new angle:")
-            elif self._reference is not None:
-                self.ctx.execute(actions.rotate_entities(
-                    self._entities, self._base, angle - self._reference,
-                    copy=self._copy))
-                self.ctx.finish()
-            else:
-                self.ctx.execute(actions.rotate_entities(
-                    self._entities, self._base, angle, copy=self._copy))
-                self.ctx.finish()
+        if self._phase == "new" and t in ("P", "POINTS"):
+            self._phase = "points"
+            self._points_first = None
+            self.prompt("Specify first point:")
             return True
-        return False
+        try:
+            angle = float(text)
+        except ValueError:
+            return False
+        if self._phase == "reference":
+            self._reference = angle
+            self._ask_new()
+        elif self._phase == "new":
+            self._rotate(angle - self._reference)
+        elif self._phase == "angle":
+            self._rotate(angle)
+        else:
+            return False
+        return True
+
+    def on_enter(self) -> None:
+        if self._base is None:
+            self.ctx.finish()
+        elif self._phase == "angle":
+            self._rotate(type(self).angle)
+        elif self._phase == "reference":
+            self._reference = 0.0
+            self._ask_new()
+        elif self._phase == "new":
+            self._rotate(0.0 - self._reference)
 
     def on_point(self, point: Point) -> None:
         if self._base is None:
@@ -221,40 +274,59 @@ class RotateTool(Tool):
             # which is what AutoCAD shows and what makes the angle obvious.
             self.ghost_entities = self._entities
             self.ghost_base = point
-            self.prompt("Specify rotation angle or [Copy/Reference]:")
+            self._ask_angle()
             return
-        ang = math.degrees(math.atan2(point[1] - self._base[1],
-                                      point[0] - self._base[0]))
-        if self._reference == -1.0:
+        if self._phase == "reference":
             if self._ref_first is None:
                 self._ref_first = point
-                self.prompt("Specify second point of reference angle:")
+                self.last_point = point
+                self.prompt("Specify second point:")
                 return
             self._reference = math.degrees(math.atan2(
                 point[1] - self._ref_first[1], point[0] - self._ref_first[0]))
-            self.prompt("Specify new angle:")
+            self.last_point = self._base
+            self._ask_new()
             return
-        if self._reference is not None:
+        if self._phase == "points":
+            if self._points_first is None:
+                self._points_first = point
+                self.last_point = point
+                self.prompt("Specify second point:")
+                return
+            new = math.degrees(math.atan2(point[1] - self._points_first[1],
+                                          point[0] - self._points_first[0]))
+            self._rotate(new - self._reference)
+            return
+        ang = math.degrees(math.atan2(point[1] - self._base[1],
+                                      point[0] - self._base[0]))
+        if self._phase == "new":
             ang -= self._reference
-        self.ctx.execute(actions.rotate_entities(self._entities, self._base, ang,
-                                                 copy=self._copy))
-        self.ctx.finish()
+        self._rotate(ang)
 
     def preview_segments(self, cursor: Point):
+        if self._phase == "reference" and self._ref_first is not None:
+            return [(self._ref_first, cursor)]
+        if self._phase == "points" and self._points_first is not None:
+            return [(self._points_first, cursor)]
         return [(self._base, cursor)] if self._base else []
 
     def ghost_placement(self, cursor: Point):
         """The angle the cursor is asking for, live."""
-        if self._base is None or self._reference == -1.0:
+        if self._base is None or self._phase in ("reference", "points"):
             return None
         angle = math.degrees(math.atan2(cursor[1] - self._base[1],
                                         cursor[0] - self._base[0]))
-        if self._reference is not None:
+        if self._phase == "new":
             angle -= self._reference
         return angle, 1.0
 
 
 class ScaleTool(Tool):
+    """SCALE as AutoCAD 2026 asks for it (group E): a factor, typed or the
+    distance picked from the base point; Reference asks "reference length
+    <1.0000>" (typed, or two points) and "new length or [Points] <1.0000>"
+    (typed, picked from the base point, or two points)."""
+
     wants_selection = True
 
     def start(self) -> None:
@@ -262,7 +334,33 @@ class ScaleTool(Tool):
         self._entities: list = []
         self._base: Point | None = None
         self._ref_length: float | None = None
+        self._ref_first: Point | None = None
+        self._points_first: Point | None = None
+        self._phase = "factor"     # factor | reference | new | points
         self._copy = False
+
+    def _text(self, value: float) -> str:
+        return _units_text(self.ctx, value, "length")
+
+    def _ask_new(self) -> None:
+        self._phase = "new"
+        self.prompt("Specify new length or [Points] <{v}>:", v=self._text(1.0))
+
+    def _scale(self, factor: float) -> None:
+        if factor <= 0:
+            self.ctx.echo(tr("Value must be positive."))
+            return
+        self.ctx.execute(actions.scale_entities(
+            self._entities, self._base, factor, copy=self._copy))
+        self.ctx.finish()
+
+    def _reference_taken(self, length: float) -> None:
+        if length <= 0:
+            self.ctx.echo(tr("Value must be positive."))
+            return
+        self._ref_length = length
+        self.last_point = self._base
+        self._ask_new()
 
     def on_selection(self, entities: list) -> None:
         if not entities:
@@ -276,38 +374,47 @@ class ScaleTool(Tool):
         # AutoCAD's _global form, into the English key the
         # branches below have always compared against.
         t = self.option(text) or text.upper()
-        if t == "C" and self._base is not None and self._ref_length is None:
+        if self._base is None:
+            return False
+        if self._phase == "factor" and t == "C":
             # Copy: the originals stay, a scaled copy is made (p.1652)
             self._copy = True
             self.ctx.echo(tr("Scaling a copy of the selected objects."))
             self.prompt("Specify scale factor or [Copy/Reference]:")
             return True
-        if t in ("R", "REFERENCE") and self._base is not None:
-            self._ref_length = -1.0
-            self.prompt("Specify reference length:")
+        if self._phase == "factor" and t in ("R", "REFERENCE"):
+            self._phase = "reference"
+            self.prompt("Specify reference length <{v}>:", v=self._text(1.0))
             return True
-        if self._base is not None:
-            try:
-                value = float(text)
-            except ValueError:
-                return False
-            if value <= 0:
-                self.ctx.echo(tr("Value must be positive."))
-                return True
-            if self._ref_length == -1.0:
-                self._ref_length = value
-                self.prompt("Specify new length:")
-            elif self._ref_length is not None:
-                self.ctx.execute(actions.scale_entities(
-                    self._entities, self._base, value / self._ref_length,
-                    copy=self._copy))
-                self.ctx.finish()
-            else:
-                self.ctx.execute(actions.scale_entities(
-                    self._entities, self._base, value, copy=self._copy))
-                self.ctx.finish()
+        if self._phase == "new" and t in ("P", "POINTS"):
+            self._phase = "points"
+            self._points_first = None
+            self.prompt("Specify first point:")
             return True
-        return False
+        try:
+            value = float(text)
+        except ValueError:
+            return False
+        if value <= 0:
+            self.ctx.echo(tr("Value must be positive."))
+            return True
+        if self._phase == "reference":
+            self._reference_taken(value)
+        elif self._phase == "new":
+            self._scale(value / self._ref_length)
+        elif self._phase == "factor":
+            self._scale(value)
+        else:
+            return False
+        return True
+
+    def on_enter(self) -> None:
+        if self._phase == "reference":
+            self._reference_taken(1.0)
+        elif self._phase == "new":
+            self._scale(1.0 / self._ref_length)
+        else:
+            self.ctx.finish()
 
     def on_point(self, point: Point) -> None:
         if self._base is None:
@@ -317,30 +424,41 @@ class ScaleTool(Tool):
             self.ghost_base = point
             self.prompt("Specify scale factor or [Copy/Reference]:")
             return
+        if self._phase == "reference":
+            if self._ref_first is None:
+                self._ref_first = point
+                self.last_point = point
+                self.prompt("Specify second point:")
+                return
+            self._reference_taken(math.dist(self._ref_first, point))
+            return
+        if self._phase == "points":
+            if self._points_first is None:
+                self._points_first = point
+                self.last_point = point
+                self.prompt("Specify second point:")
+                return
+            self._scale(math.dist(self._points_first, point) / self._ref_length)
+            return
         # AutoCAD takes the factor from the distance to the base point, and
         # shows it growing as you go.
         factor = math.dist(self._base, point)
-        if factor <= 0:
-            self.ctx.echo(tr("Value must be positive."))
-            return
-        if self._ref_length == -1.0:
-            self._ref_length = factor
-            self.prompt("Specify new length:")
-            return
-        if self._ref_length is not None:
-            factor = factor / self._ref_length
-        self.ctx.execute(actions.scale_entities(
-            self._entities, self._base, factor, copy=self._copy))
-        self.ctx.finish()
+        if self._phase == "new":
+            factor /= self._ref_length
+        self._scale(factor)
 
     def preview_segments(self, cursor: Point):
+        if self._phase == "reference" and self._ref_first is not None:
+            return [(self._ref_first, cursor)]
+        if self._phase == "points" and self._points_first is not None:
+            return [(self._points_first, cursor)]
         return [(self._base, cursor)] if self._base else []
 
     def ghost_placement(self, cursor: Point):
-        if self._base is None or self._ref_length == -1.0:
+        if self._base is None or self._phase in ("reference", "points"):
             return None
         factor = math.dist(self._base, cursor)
-        if self._ref_length is not None and self._ref_length > 0:
+        if self._phase == "new" and self._ref_length:
             factor /= self._ref_length
         return 0.0, max(factor, 1e-6)
 

@@ -1612,7 +1612,6 @@
   "Systems of angle measure: (Examples)": "Sistemas de medida angular: (ejemplos)",
   "T": "S",
   "TRIM": "TRIM",
-  "TRIM supports LINE, PLINE, CIRCLE and ARC for now.": "TRIM soporta LINE, PLINE, CIRCLE y ARC por ahora.",
   "Table created. Fill the cells with TEXT.": "Tabla creada. Rellene las celdas con TEXT.",
   "Table...": "Tabla...",
   "Tag": "Etiqueta",
@@ -2190,5 +2189,6 @@
   "Portuguese (Brazil) translation of the interface.": "Traducción al portugués (Brasil) de la interfaz.",
   "Korean translation of the interface.": "Traducción al coreano de la interfaz.",
   "The construction lines that ended at the edge of the screen.": "Las líneas auxiliares que terminaban en el borde de la pantalla.",
-  "Asked for toolbars that stay hidden.": "Pidió barras de herramientas que se queden ocultas."
+  "Asked for toolbars that stay hidden.": "Pidió barras de herramientas que se queden ocultas.",
+  "TRIM supports LINE, PLINE, CIRCLE, ARC and ELLIPSE for now.": "TRIM soporta LINE, PLINE, CIRCLE, ARC y ELLIPSE por ahora."
 }

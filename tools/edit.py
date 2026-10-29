@@ -1070,8 +1070,26 @@ class _TrimExtendBase(Tool):
                 for chain in chains
             ]
             self._replace("TRIM", entity, factories)
+        elif t == "ELLIPSE":
+            ce = entity.construction_tool()
+            spans = editmath.trim_ellipse(
+                (ce.center.x, ce.center.y), (ce.major_axis.x, ce.major_axis.y),
+                (ce.minor_axis.x, ce.minor_axis.y), ce.start_param,
+                ce.end_param, segs, circles, point)
+            if spans is None:
+                self._nothing_crosses(entity)
+                return
+            d = entity.dxf
+            factories = [
+                (lambda msp, s=s0, e=e0: msp.add_ellipse(
+                    d.center, major_axis=d.major_axis, ratio=d.ratio,
+                    start_param=s, end_param=e,
+                    dxfattribs={"extrusion": d.extrusion}))
+                for s0, e0 in spans
+            ]
+            self._replace("TRIM", entity, factories)
         else:
-            self.ctx.echo(tr("TRIM supports LINE, PLINE, CIRCLE and ARC for now."))
+            self.ctx.echo(tr("TRIM supports LINE, PLINE, CIRCLE, ARC and ELLIPSE for now."))
 
     def _nothing_crosses(self, entity) -> None:
         """No cutting edge crosses the picked object. Standard says so;

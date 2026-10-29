@@ -254,10 +254,14 @@ def trim_polyline(points: list[Point], closed: bool, pick_point: Point,
                   circles: list[tuple[Point, float]]):
     """Trim the picked span of a straight-segment polyline.
 
-    The polyline's OWN other segments also act as cutting edges (AutoCAD
-    self-trim: the crossing tails of a sketch trim against the shape).
+    A polyline is one object: the span removed runs along it, over its
+    vertices, from the crossing before the pick to the crossing after it
+    -- as AutoCAD trims a rectangle against a circle, its corners are no
+    cut. The polyline's own segments cut it where they CROSS it (AutoCAD
+    self-trim: the crossing tails of a sketch trim against the shape),
+    never where two of them meet at a vertex.
     Returns a list of vertex chains (0, 1 or 2 polylines) or None when no
-    edge crosses the picked segment.
+    edge crosses it (a closed one needs two crossings).
     """
     n = len(points)
     if n < 2:
@@ -267,7 +271,6 @@ def trim_polyline(points: list[Point], closed: bool, pick_point: Point,
              points[(i + 1) % n][0], points[(i + 1) % n][1])
             for i in range(seg_count)]
 
-    # picked segment: closest to the pick point
     def dist2(seg: Seg) -> float:
         x1, y1, x2, y2 = seg
         dx, dy = x2 - x1, y2 - y1
@@ -283,41 +286,175 @@ def trim_polyline(points: list[Point], closed: bool, pick_point: Point,
     L2 = dx * dx + dy * dy
     pick_t = 0.0 if L2 == 0 else max(0.0, min(1.0, (
         (pick_point[0] - seg_k[0]) * dx + (pick_point[1] - seg_k[1]) * dy) / L2))
+    g_pick = k + pick_t
 
-    all_cutters = list(cutters) + [s for i, s in enumerate(segs) if i != k]
-    pieces = trim_segment(seg_k, all_cutters, circles, pick_t)
-    if pieces is None:
+    def adjacent(i: int, j: int) -> bool:
+        if abs(i - j) == 1:
+            return True
+        return closed and abs(i - j) == seg_count - 1
+
+    # every cut as a position along the polyline: segment index + t
+    cuts: list[float] = []
+    for i, seg in enumerate(segs):
+        for t in _segment_cuts(seg, cutters, circles):
+            cuts.append(i + t)
+        for j, other in enumerate(segs):
+            if j == i or adjacent(i, j):
+                continue
+            hit = line_line_intersection(seg, other)
+            if hit is not None and EPS < hit[0] < 1.0 - EPS:
+                cuts.append(i + hit[0])
+    cuts = sorted({round(c, 12) for c in cuts})
+    if not cuts or (closed and len(cuts) < 2):
         return None
-    piece1 = next((p for p in pieces
-                   if (p[0], p[1]) == (seg_k[0], seg_k[1])), None)
-    piece2 = next((p for p in pieces
-                   if (p[2], p[3]) == (seg_k[2], seg_k[3])), None)
+
+    def at(g: float) -> Point:
+        i = min(int(math.floor(g)), seg_count - 1) if not closed else int(math.floor(g))
+        t = g - i
+        x1, y1, x2, y2 = segs[i % seg_count]
+        return (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+
+    def run(a: float, b: float) -> list[Point]:
+        """The polyline from position a to b, its vertices in between."""
+        chain = [at(a)]
+        v = math.floor(a) + 1
+        while v < b - EPS:
+            chain.append(points[v % n])
+            v += 1
+        chain.append(at(b))
+        out: list[Point] = []
+        for q in chain:
+            if not out or math.hypot(q[0] - out[-1][0], q[1] - out[-1][1]) > EPS:
+                out.append(q)
+        return out
 
     chains: list[list[Point]] = []
     if closed:
-        # the ring opens at the removed span: one chain from the trim end
-        # forward around to the trim start
-        idxs = [(k + 1 + i) % n for i in range(n)]
-        chain: list[Point] = []
-        if piece2 is not None:
-            chain.append((piece2[0], piece2[1]))
-        chain.extend(points[i] for i in idxs)
-        if piece1 is not None:
-            chain.append((piece1[2], piece1[3]))
+        lo = max((c for c in cuts if c <= g_pick), default=cuts[-1] - seg_count)
+        hi = min((c for c in cuts if c >= g_pick), default=cuts[0] + seg_count)
+        chain = run(hi, lo + seg_count)
         if len(chain) >= 2:
             chains.append(chain)
     else:
-        chain_a: list[Point] = list(points[:k + 1])
-        if piece1 is not None:
-            chain_a.append((piece1[2], piece1[3]))
-        chain_b: list[Point] = []
-        if piece2 is not None:
-            chain_b.append((piece2[0], piece2[1]))
-        chain_b.extend(points[k + 1:])
-        for chain in (chain_a, chain_b):
-            if len(chain) >= 2:
-                chains.append(chain)
+        lo = max((c for c in cuts if c <= g_pick), default=0.0)
+        hi = min((c for c in cuts if c >= g_pick), default=float(seg_count))
+        for a, b in ((0.0, lo), (hi, float(seg_count))):
+            if b - a > EPS:
+                chain = run(a, b)
+                if len(chain) >= 2:
+                    chains.append(chain)
     return chains
+
+
+def _segment_cuts(seg: Seg, cutters: list[Seg],
+                  circles: list[tuple[Point, float]]) -> list[float]:
+    """Params in [0, 1] where other objects cross ``seg``, its ends
+    included (an edge through a vertex cuts there)."""
+    ts: list[float] = []
+    for c in cutters:
+        hit = line_line_intersection(seg, c)
+        if hit is not None and -EPS < hit[0] < 1.0 + EPS:
+            ts.append(min(max(hit[0], 0.0), 1.0))
+    for entry in circles:
+        center, r, a0, a1 = _norm_circle(entry)
+        for t in line_circle_intersections(seg, center, r):
+            if -EPS < t < 1.0 + EPS:
+                x = seg[0] + t * (seg[2] - seg[0])
+                y = seg[1] + t * (seg[3] - seg[1])
+                if _on_arc(center, a0, a1, x, y):
+                    ts.append(min(max(t, 0.0), 1.0))
+    return ts
+
+
+def trim_ellipse(center: Point, major: Point, minor: Point,
+                 start: float, end: float, cutters: list[Seg],
+                 circles: list[tuple[Point, float]], pick_point: Point):
+    """Trim the picked span of an ellipse or elliptical arc.
+
+    ``major``/``minor`` are the semi-axis vectors (the point at parameter
+    p is center + cos p * major + sin p * minor), ``start``/``end`` its
+    parameters. Returns the surviving (start, end) parameter spans, or
+    None when nothing crosses it (a full ellipse needs two crossings)."""
+    cx, cy = center
+    m2 = major[0] ** 2 + major[1] ** 2
+    n2 = minor[0] ** 2 + minor[1] ** 2
+    if m2 < EPS or n2 < EPS:
+        return None
+
+    def unit(x: float, y: float) -> Point:
+        # the ellipse maps to the unit circle, lines to lines
+        rx, ry = x - cx, y - cy
+        return ((rx * major[0] + ry * major[1]) / m2,
+                (rx * minor[0] + ry * minor[1]) / n2)
+
+    def point(p: float) -> Point:
+        c, s_ = math.cos(p), math.sin(p)
+        return (cx + c * major[0] + s_ * minor[0],
+                cy + c * major[1] + s_ * minor[1])
+
+    params: list[float] = []
+    for x1, y1, x2, y2 in cutters:
+        u1, u2 = unit(x1, y1), unit(x2, y2)
+        seg_u = (u1[0], u1[1], u2[0], u2[1])
+        for t in line_circle_intersections(seg_u, (0.0, 0.0), 1.0):
+            if -EPS < t < 1.0 + EPS:
+                params.append(math.atan2(u1[1] + t * (u2[1] - u1[1]),
+                                         u1[0] + t * (u2[0] - u1[0])))
+    steps = 1024
+    for entry in circles:
+        (ox, oy), r, a0, a1 = _norm_circle(entry)
+
+        def f(p: float) -> float:
+            x, y = point(p)
+            return math.hypot(x - ox, y - oy) - r
+
+        prev_p, prev_f = 0.0, f(0.0)
+        for i in range(1, steps + 1):
+            p = math.tau * i / steps
+            fp = f(p)
+            if prev_f == 0.0 or prev_f * fp < 0.0:
+                lo_p, hi_p, f_lo = prev_p, p, prev_f
+                for _ in range(50):
+                    mid = 0.5 * (lo_p + hi_p)
+                    fm = f(mid)
+                    if f_lo * fm <= 0.0:
+                        hi_p = mid
+                    else:
+                        lo_p, f_lo = mid, fm
+                root = 0.5 * (lo_p + hi_p)
+                x, y = point(root)
+                if _on_arc((ox, oy), a0, a1, x, y):
+                    params.append(root)
+            prev_p, prev_f = p, fp
+
+    span = (end - start) % math.tau
+    full = span < EPS or abs(span - math.tau) < EPS
+    if full:
+        span = math.tau
+    up = unit(*pick_point)
+    s_pick = (math.atan2(up[1], up[0]) - start) % math.tau
+    if not full:
+        s_pick = min(s_pick, span)
+    cuts = sorted({round((p - start) % math.tau, 12) for p in params})
+    if not full:
+        cuts = [c for c in cuts if EPS < c < span - EPS]
+    if full:
+        cuts = _unique_angles(cuts)
+        if len(cuts) < 2:
+            return None
+        lo = max((c for c in cuts if c <= s_pick), default=cuts[-1] - math.tau)
+        hi = min((c for c in cuts if c >= s_pick), default=cuts[0] + math.tau)
+        return [((start + hi) % math.tau, (start + lo) % math.tau)]
+    if not cuts:
+        return None
+    lo = max((c for c in cuts if c <= s_pick), default=0.0)
+    hi = min((c for c in cuts if c >= s_pick), default=span)
+    spans = []
+    if lo > EPS:
+        spans.append((start % math.tau, (start + lo) % math.tau))
+    if hi < span - EPS:
+        spans.append(((start + hi) % math.tau, (start + span) % math.tau))
+    return spans
 
 
 # -- EXTEND --------------------------------------------------------------------

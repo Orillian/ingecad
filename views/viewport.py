@@ -1793,8 +1793,10 @@ class Viewport(QOpenGLWidget):
                     # highlight the ARC's real sweep, not its full circle
                     a0 = _math.degrees(c[4])
                     span = _math.degrees(c[5] - c[4])
-                    p.drawArc(int(x - r), int(y - r), int(2 * r), int(2 * r),
-                              int(a0 * 16), int(span * 16))
+                    # in floats: whole pixels set the highlight up to one
+                    # off the circle drawn under it, a second line zoomed in
+                    p.drawArc(QRectF(x - r, y - r, 2 * r, 2 * r),
+                              int(round(a0 * 16)), int(round(span * 16)))
                 else:
                     p.drawEllipse(QPointF(x, y), r, r)
             rects = []

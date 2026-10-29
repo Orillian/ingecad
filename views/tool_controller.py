@@ -3840,7 +3840,8 @@ class ToolController(QObject):
         if not self.selection or self.index is None:
             empty = np.empty((0, 4))
             return empty, empty, empty
-        key = (self.index.version, frozenset(self.selection))
+        bucket = self._curve_bucket()
+        key = (self.index.version, frozenset(self.selection), bucket)
         cached = self._highlight_cache
         if cached is not None and cached[0] == key:
             return cached[1]
@@ -3852,6 +3853,51 @@ class ToolController(QObject):
                 return cached[1]
             empty = np.empty((0, 4))
             return empty, empty, empty
-        result = self.index.highlight_of(self.selection)
+        result = self._exact_curves(self.selection, bucket)
         self._highlight_cache = (key, result)
         return result
+
+    #: Past this many selected ellipses and splines the highlight keeps the
+    #: index's chords: re-tracing them per zoom step would cost more than
+    #: the facets do on a selection that size.
+    EXACT_CURVES_MAX = 200
+
+    def _curve_bucket(self) -> float:
+        """A pixel in space units, rounded down to a power of two: the
+        highlight's curves are traced again only when the zoom halves or
+        doubles."""
+        import math
+
+        px = self.px_to_space(1.0)
+        return 2.0 ** math.floor(math.log2(px)) if px > 0 else 1.0
+
+    def _exact_curves(self, handles, bucket: float):
+        """The index's outline of ``handles``, with ellipses and splines
+        traced to a quarter of a pixel. The index keeps chords of 1/500 of
+        each curve's size -- plenty to pick by, but zoomed in on a selected
+        ellipse its highlight showed as a polygon beside the smooth curve,
+        a second, false line (the author's recording, 2026-10-29)."""
+        db = self.document.doc.entitydb
+        curves = []
+        for handle in handles:
+            entity = db.get(handle)
+            if entity is not None and entity.dxftype() in ("ELLIPSE", "SPLINE"):
+                curves.append(entity)
+        if not curves or len(curves) > self.EXACT_CURVES_MAX:
+            return self.index.highlight_of(handles)
+        from ezdxf import path as ezpath
+
+        traced = []
+        for entity in curves:
+            try:
+                points = [(v.x, v.y) for v in
+                          ezpath.make_path(entity).flattening(bucket / 4.0)]
+            except Exception:
+                return self.index.highlight_of(handles)
+            traced.extend((a[0], a[1], b[0], b[1])
+                          for a, b in zip(points, points[1:]))
+        keep = set(handles) - {e.dxf.handle for e in curves}
+        segs, circles, boxes = self.index.highlight_of(keep)
+        if traced:
+            segs = np.vstack([segs.reshape(-1, 4), np.asarray(traced, float)])
+        return segs, circles, boxes

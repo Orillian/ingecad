@@ -206,7 +206,19 @@ def test_dimbreak_manual_and_remove():
 
 # -- DIMJOGGED -----------------------------------------------------------------
 
-def test_dimjogged_reads_the_true_radius_and_draws_a_jog():
+def _jog_shape(h, dim):
+    """The jogged line's vertices O, B, A, P, chained from the override."""
+    lines = _block_lines(h, dim)
+    return [(round(e.dxf.start.x, 6), round(e.dxf.start.y, 6))
+            for e in lines] + [(round(lines[-1].dxf.end.x, 6),
+                                round(lines[-1].dxf.end.y, 6))]
+
+
+def test_dimjogged_points_at_the_true_centre_with_a_wide_jog():
+    """Rafael's eighth review (min 36-43): the arrow's segment points at
+    the true centre, the segment from the override runs parallel to it,
+    the jog between them is a wide transverse at DIMJOGANG (45), and the
+    text sits on the arrow's segment, not at the tip."""
     h = Harness()
     arc = h.msp.add_arc((0, 0), 500, 0, 90)
     h.services.picks = {(500, 0): arc}
@@ -214,17 +226,27 @@ def test_dimjogged_reads_the_true_radius_and_draws_a_jog():
     tool.start()
     tool.on_point((500, 0))
     assert h.prompts[-1] == "Specify center location override:"
-    tool.on_point((300, 300))
+    tool.on_point((300, 100))
     assert "[Mtext/Text/Angle]" in h.prompts[-1]
-    tool.on_point((400, 400))
-    assert h.prompts[-1] == "Specify jog location:"
     tool.on_point((330, 330))
+    assert h.prompts[-1] == "Specify jog location:"
+    tool.on_point((300, 300))
     dim = h.dims()[0]
-    assert dim.dxf.text == "R500"
-    lines = _block_lines(h, dim)
-    assert len(lines) >= 5, "no jog in the dimension line"
-    starts = [(round(e.dxf.start.x, 6), round(e.dxf.start.y, 6)) for e in lines]
-    assert (300.0, 300.0) in starts, "the line does not start at the override"
+    assert dim.get_measurement() == pytest.approx(500.0)
+    block = h.document.doc.blocks.get(dim.dxf.geometry)
+    assert [e.plain_text() for e in block if e.dxftype() == "MTEXT"] == ["R500"]
+    o, b, a, p = _jog_shape(h, dim)
+    assert o == (300.0, 100.0)
+    assert p == pytest.approx((500 / math.sqrt(2), 500 / math.sqrt(2)))
+    # A on the radial line, O -> B parallel to it, B -> A at 45 degrees
+    assert a[0] == pytest.approx(a[1])
+    assert b[0] - o[0] == pytest.approx(b[1] - o[1])
+    seg = math.degrees(math.atan2(a[1] - b[1], a[0] - b[0]))
+    assert abs(seg - 45.0) == pytest.approx(45.0)
+    assert math.dist(a, b) == pytest.approx(200.0)     # |h| / sin 45
+    text = [e for e in block if e.dxftype() == "MTEXT"][0].dxf.insert
+    s_text = (text.x + text.y) / math.sqrt(2)
+    assert math.hypot(*a) < s_text < 500.0, "the text is not on the arrow's segment"
     h.history.undo()
     assert h.dims() == []
 

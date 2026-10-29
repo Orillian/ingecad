@@ -31,6 +31,7 @@ def apply() -> None:
     _patch_annotative_dimension_scales()
     _patch_lwpolyline_get_points()
     _patch_radial_dimension_layout()
+    _patch_jogged_radius()
     _patch_linear_dimension_direction()
     _patch_dxfreplace_mixed_surrogates()
     _patch_single_vertex_leader()
@@ -1030,6 +1031,31 @@ def _patch_lwpolyline_get_points() -> None:
     get_points.__doc__ = LWPolyline.get_points.__doc__
     get_points._ingecad_patch = True
     LWPolyline.get_points = get_points
+
+
+def _patch_jogged_radius() -> None:
+    """A DIMJOGGED radius is drawn jogged on every render.
+
+    Not an ezdxf defect: IngeCAD stores a jogged radius as a plain radius
+    with its centre override and jog in XDATA (core.dim_commands), so a
+    re-render -- a style change, a moved text -- must draw the jog again;
+    it used to come back as a plain radius to the override.
+    """
+    from ezdxf.render.dim_radius import RadiusDimension
+
+    original = RadiusDimension.render
+    if getattr(original, "_ingecad_patch", False):
+        return
+
+    def render(self, block) -> None:
+        original(self, block)
+        if type(self) is RadiusDimension:
+            from core.dim_commands import draw_jog
+
+            draw_jog(self, block)
+
+    render._ingecad_patch = True
+    RadiusDimension.render = render
 
 
 def _patch_radial_dimension_layout() -> None:

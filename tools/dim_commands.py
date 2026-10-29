@@ -535,7 +535,8 @@ class DimJoggedTool(Tool):
         dx, dy = self._location[0] - c.x, self._location[1] - c.y
         length = math.hypot(dx, dy) or 1.0
         on_arc = (c.x + r * dx / length, c.y + r * dy / length)
-        pts = dim_commands.jog_points(self._override, on_arc, cursor, r * 0.1)
+        pts = dim_commands.jog_points((c.x, c.y), on_arc, self._override,
+                                      cursor)
         return list(zip(pts, pts[1:]))
 
 

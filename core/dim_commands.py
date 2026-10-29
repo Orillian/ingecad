@@ -6,10 +6,11 @@ The interactive tools live in :mod:`tools.dim_commands`; everything here is
 a Command over the document or a pure computation, so a script can call it
 and a test can check it without a window.
 
-*Jogged* radius dimensions are stored as a radius DIMENSION whose centre is
-the override point and whose text carries the true radius; the jog is drawn
-into the dimension's own *D block. Any CAD reads it as a radius dimension
-(AutoCAD's AcDbRadialDimensionLarge has no renderer in ezdxf).
+*Jogged* radius dimensions are stored as a radius DIMENSION of the true
+centre and radius, the centre override and the jog as XDATA; every render
+draws the jog into the dimension's own *D block. Any CAD reads it as a
+radius dimension (AutoCAD's AcDbRadialDimensionLarge has no renderer in
+ezdxf, and no place in the r2000 DWG IngeCAD saves).
 
 *Breaks* are cut into the *D block's lines and remembered as XDATA under
 the INGECAD appid, so Remove knows what to undo; a later re-render of the
@@ -326,94 +327,143 @@ class DimBreakRemoveCommand(Command):
 
 # -- DIMJOGGED -------------------------------------------------------------------
 
-def jog_points(o: Point, p: Point, jog: Point, height: float) -> list[Point]:
-    """The polyline O -> A -> B -> C -> D -> P of a jogged radius line: a
-    Z of ``height`` across the line at the projection of ``jog``."""
-    dx, dy = p[0] - o[0], p[1] - o[1]
-    length = math.hypot(dx, dy) or 1.0
-    ux, uy = dx / length, dy / length
+#: AutoCAD's DIMJOGANG initial value (p. 2241); valid range 5 to 90.
+DEFAULT_JOG_ANGLE = 45.0
+XDATA_JOG_TAG = "DIMJOGGED"
+
+
+def jog_points(center: Point, p: Point, override: Point, jog: Point,
+               angle: float = DEFAULT_JOG_ANGLE,
+               limit: Optional[float] = None) -> list[Point]:
+    """The polyline O -> B -> A -> P of a jogged radius, AutoCAD's shape
+    (Rafael's eighth review, the norm's): A -> P lies on the TRUE radial
+    line, pointing at the centre wherever it is; O -> B runs parallel to it
+    from the centre override; B -> A is the transverse segment, at
+    ``angle`` degrees to the dimension line, centred where ``jog``
+    projects. ``limit`` is the farthest A may sit from the true centre
+    (the text sits on the arrow's segment)."""
+    cx, cy = center
+    r = math.hypot(p[0] - cx, p[1] - cy) or 1.0
+    ux, uy = (p[0] - cx) / r, (p[1] - cy) / r
     nx, ny = -uy, ux
-    t = (jog[0] - o[0]) * ux + (jog[1] - o[1]) * uy
-    t = max(height, min(length - height, t))
-    half = height / 2.0
-
-    def at(s: float, offset: float = 0.0) -> Point:
-        return (o[0] + ux * s + nx * offset, o[1] + uy * s + ny * offset)
-
-    return [o, at(t - height), at(t - half, half), at(t + half, -half),
-            at(t + height), p]
-
-
-class AddJoggedDimensionCommand(AddDimensionCommand):
-    """A radius dimension from a centre override, its line jogged."""
-
-    name = "DIMJOGGED"
-
-    def __init__(self, factory, override: Point, jog: Point) -> None:
-        super().__init__(factory)
-        self._override = override
-        self._jog = jog
-
-    def do(self, document) -> None:
-        super().do(document)
-        d = self.dim
-        block = document.doc.blocks.get(d.dxf.geometry)
-        height = text_height(document, d)
-        o = self._override
-        end = d.dxf.defpoint4                    # the point on the arc
-        p = (end.x, end.y)
-        # ezdxf drew a plain radius: a short line at the text and a centre
-        # mark at the override. A jogged radius has neither: its line runs
-        # from the override to the arc, with the Z where the user put it.
-        attribs = None
-        for line in list(block):
-            if line.dxftype() != "LINE" or line.dxf.layer.lower() == "defpoints":
-                continue
-            if attribs is None:
-                attribs = line.dxfattribs()
-                for key in ("handle", "owner", "start", "end"):
-                    attribs.pop(key, None)
-            block.delete_entity(line)
-        pts = jog_points(o, p, self._jog, height)
-        for s, e in zip(pts, pts[1:]):
-            block.add_line(s, e, dxfattribs=attribs or {})
+    ox, oy = override[0] - cx, override[1] - cy
+    h = ox * nx + oy * ny
+    if abs(h) <= 1e-9 * max(1.0, r):
+        return [override, p]
+    s_o = ox * ux + oy * uy
+    angle = max(5.0, min(90.0, angle))
+    d = 0.0 if angle >= 90.0 else abs(h) / math.tan(math.radians(angle))
+    s_j = (jog[0] - cx) * ux + (jog[1] - cy) * uy
+    hi = r if limit is None else min(r, limit)
+    s_a = min(s_j + d / 2.0, hi)
+    s_b = s_a - d
+    if s_b < s_o:
+        s_b, s_a = s_o, s_o + d
+    return [override,
+            (cx + ux * s_b + nx * h, cy + uy * s_b + ny * h),
+            (cx + ux * s_a, cy + uy * s_a), p]
 
 
-def _format_length(document, value: float) -> str:
-    dec = int(document.doc.header.get("$DIMDEC", 2))
-    text = f"{value:.{dec}f}"
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text or "0"
+def jog_data(dim) -> Optional[tuple[Point, Point]]:
+    """(centre override, jog location) of a jogged radius, or None. Kept
+    as XDATA world points (1011), which follow the dimension when it is
+    moved, rotated or scaled."""
+    if not dim.has_xdata(xdata.APPID):
+        return None
+    tags = list(dim.get_xdata(xdata.APPID))
+    for i, (code, value) in enumerate(tags):
+        if code == 1000 and value == XDATA_JOG_TAG:
+            points = [v for c, v in tags[i + 1:i + 3] if c == 1011]
+            if len(points) == 2:
+                return ((points[0][0], points[0][1]),
+                        (points[1][0], points[1][1]))
+    return None
+
+
+def _jog_angle(get) -> float:
+    """DIMJOGANG in degrees: DXF stores it in radians, a value above the
+    90-degree mark in radians can only be degrees."""
+    value = get("dimjogang", None)
+    if value is None:
+        return DEFAULT_JOG_ANGLE
+    value = float(value)
+    return math.degrees(value) if value <= math.pi / 2 + 1e-9 else value
+
+
+def draw_jog(renderer, block) -> None:
+    """Redraw a jogged radius's dimension line into its freshly rendered
+    block: ezdxf drew a plain radius to the true centre (a centre mark
+    there, the line through it); the jogged one runs from the override
+    instead. Called on every render, so a style change or a moved text
+    keeps the jog."""
+    data = jog_data(renderer.dimension)
+    if data is None:
+        return
+    override, jog = data
+    c, p = renderer.center, renderer.point_on_circle
+    r = (p - c).magnitude or 1.0
+    ux, uy = (p.x - c.x) / r, (p.y - c.y) / r
+    eps = 1e-6 * max(1.0, r)
+    far = r
+    limit = None
+    m = renderer.measurement
+    if m.text and m.text_location is not None:
+        t = m.text_location
+        s_text = (t.x - c.x) * ux + (t.y - c.y) * uy
+        if s_text < r:              # the text sits on the arrow's segment
+            limit = s_text - renderer.total_text_width() / 2.0
+    attribs = None
+    for line in list(block):
+        if line.dxftype() != "LINE" or line.dxf.layer.lower() == "defpoints":
+            continue
+        a, b = line.dxf.start, line.dxf.end
+        perp = [abs((q.x - c.x) * -uy + (q.y - c.y) * ux) for q in (a, b)]
+        inside = all(math.hypot(q.x - c.x, q.y - c.y) <= r + eps for q in (a, b))
+        if not (inside or max(perp) <= eps):
+            continue                 # a horizontal landing outside: kept
+        if max(perp) <= eps:
+            far = max(far, *((q.x - c.x) * ux + (q.y - c.y) * uy for q in (a, b)))
+        if attribs is None:
+            attribs = line.dxfattribs()
+            for key in ("handle", "owner", "start", "end"):
+                attribs.pop(key, None)
+        block.delete_entity(line)
+    pts = jog_points((c.x, c.y), (p.x, p.y), override, jog,
+                     _jog_angle(renderer.dim_style.get), limit)
+    if far > r + eps:
+        pts[-1] = (c.x + ux * far, c.y + uy * far)
+    for s, e in zip(pts, pts[1:]):
+        block.add_line(s, e, dxfattribs=attribs or {})
 
 
 def dim_jogged(center: Point, radius: float, override: Point, location: Point,
                jog: Point, *, text: str = "<>",
-               text_rotation: Optional[float] = None) -> AddJoggedDimensionCommand:
-    """DIMJOGGED: the dimension line starts at ``override`` and reaches the
-    arc where the ray centre->location meets it; the text reads the TRUE
-    radius (the stored radius is the override's distance to that point)."""
+               text_rotation: Optional[float] = None) -> AddDimensionCommand:
+    """DIMJOGGED: a radius dimension of the TRUE centre and radius -- it
+    measures, and re-measures, like any other -- whose text sits at
+    ``location``; the centre override and the jog live in its XDATA and
+    every render draws the jogged line (:func:`draw_jog`)."""
     from core.actions import _current_dimstyle, _text_rotation_attribs
 
     dx, dy = location[0] - center[0], location[1] - center[1]
-    length = math.hypot(dx, dy)
-    if length < 1e-9:
-        dx, dy, length = 1.0, 0.0, 1.0
-    on_arc = (center[0] + radius * dx / length, center[1] + radius * dy / length)
-    fake_radius = math.dist(override, on_arc)
+    if math.hypot(dx, dy) < 1e-9:
+        location = (center[0] + radius, center[1])
 
     def factory(msp, document):
-        label = text
-        if label == "<>":
-            label = "R" + _format_length(document, radius)
-        elif "<>" in label:
-            label = label.replace("<>", _format_length(document, radius), 1)
-        return msp.add_radius_dim(
-            center=(override[0], override[1]), radius=fake_radius,
-            location=on_arc, text=label, dimstyle=_current_dimstyle(document),
+        override_ = msp.add_radius_dim(
+            center=(center[0], center[1]), radius=radius,
+            location=location, text=text, dimstyle=_current_dimstyle(document),
             dxfattribs=_text_rotation_attribs(text_rotation))
+        xdata.ensure_appid(document.doc)
+        override_.dimension.set_xdata(xdata.APPID, [
+            (1000, XDATA_JOG_TAG),
+            (1011, (override[0], override[1], 0.0)),
+            (1011, (jog[0], jog[1], 0.0))])
+        return override_
 
-    return AddJoggedDimensionCommand(factory, override, jog)
+    cmd = AddDimensionCommand(factory)
+    cmd.name = "DIMJOGGED"
+    return cmd
 
 
 # -- DIMSPACE --------------------------------------------------------------------

@@ -1802,8 +1802,13 @@ class ToolController(QObject):
             else:
                 if not isinstance(command, actions.AddEntityCommand):
                     # drawn entities reach the overlay via _draw_commands()
-                    self._pending_render.extend(added)
+                    self._pending_render.extend(
+                        e for e in added if e.dxftype() != "IMAGE")
                 self._refresh_overlay()
+                if any(e.dxftype() == "IMAGE" for e in added):
+                    # a new raster has no quad, and the overlay never draws
+                    # one: a pasted image stayed invisible until REGEN
+                    self.window.regen_in_memory()
             if (not isinstance(command, actions.AddDimensionCommand)
                     and any(e.dxftype() == "DIMENSION" for e in added)):
                 # A PASTED dimension may arrive without its *D block, so only
@@ -1882,15 +1887,21 @@ class ToolController(QObject):
             # Dedupe: MATCHPROP onto an entity already riding the overlay
             # (a dimension drawn seconds ago) would otherwise queue it twice
             # and tessellate it twice on every refresh.
+            fresh_image = False
             for entity in new_ents:
-                if entity.dxftype() == "IMAGE" and self._sync_image_quad(entity):
+                if entity.dxftype() == "IMAGE":
                     # a MOVEd/ROTATEd image: its pixels are repositioned
-                    # surgically, and queuing it would decode its file on
-                    # every overlay refresh until the merge. A fresh COPY
-                    # has no quad yet — sync fails and it queues normally.
+                    # surgically. A fresh COPY has no quad yet, and the
+                    # overlay never draws rasters (it would decode the file
+                    # on every refresh): the copy stayed invisible until
+                    # REGEN, so only a regen puts it on screen.
+                    if not self._sync_image_quad(entity) and entity.is_alive:
+                        fresh_image = True
                     continue
                 if entity not in self._pending_render:
                     self._pending_render.append(entity)
+            if fresh_image:
+                self.window.regen_in_memory()
             alive = [e for e in new_ents if e.is_alive]
             # patch both caches: O(touched) instead of a full rebuild
             # (all calls no-op if the cache was invalidated above)

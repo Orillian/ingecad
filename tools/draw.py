@@ -475,7 +475,9 @@ class ArcTool(Tool):
         try:
             geom = build()
         except ValueError:
-            self.ctx.echo(tr("Invalid arc geometry."))
+            # AutoCAD's answer to an impossible value (a radius under half
+            # the chord, a chord over the diameter): *Invalid*, command ends
+            self.ctx.echo(tr("*Invalid*"))
             self.ctx.finish()
             return
         self._emit(geom)

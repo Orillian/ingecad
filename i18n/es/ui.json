@@ -2199,5 +2199,6 @@
   "Start, End, Radius": "Inicio, fin, radio",
   "Center, Start, End": "Centro, inicio, fin",
   "Center, Start, Angle": "Centro, inicio, ángulo",
-  "Center, Start, Length": "Centro, inicio, longitud"
+  "Center, Start, Length": "Centro, inicio, longitud",
+  "*Invalid*": "*No válido*"
 }

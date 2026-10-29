@@ -434,6 +434,9 @@ def arc_ser(start, end, radius: float):
 def add_arc_geom(geom) -> AddEntityCommand:
     """Command from an arc geometry tuple (see the section comment)."""
     center, radius, a1, a2 = geom[0], geom[1], geom[2], geom[3]
+    # the sweep math runs past 360 (a negative chord's major arc ended at
+    # 466 deg); the entity stores both angles in [0, 360) as AutoCAD does
+    a1, a2 = a1 % 360.0, a2 % 360.0
     return AddEntityCommand(
         "ARC", lambda msp: msp.add_arc((center[0], center[1]), radius, a1, a2))
 

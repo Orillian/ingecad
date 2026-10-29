@@ -3752,6 +3752,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         tabs.addTab(self._styles_panel, tr("Palette"))
         tabs.addTab(self._xrefs_panel, tr("Xrefs"))
         self._sidebar_tabs = tabs
+        self._assistant_panel = None
+        self.sync_assistant()
 
         dock = QDockWidget(self)
         dock.setObjectName("sidebar_dock")
@@ -3881,6 +3883,35 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self._show_sidebar()
         self._sidebar_tabs.setCurrentWidget(self._xrefs_panel)
         self._xrefs_panel.refresh()
+
+    # -- the AI assistant (off by default) -----------------------------------------
+    def sync_assistant(self) -> None:
+        """Add or take away the Assistant tab as Options says. While it is
+        off nothing of core.ai is even imported."""
+        from views import ai_panel
+
+        panel = self._assistant_panel
+        if ai_panel.enabled():
+            if panel is None:
+                panel = ai_panel.AssistantPanel(self)
+                self._assistant_panel = panel
+                self._sidebar_tabs.addTab(panel, tr("Assistant"))
+            panel.refresh()
+        elif panel is not None and not panel.busy():
+            self._sidebar_tabs.removeTab(self._sidebar_tabs.indexOf(panel))
+            panel.shutdown()
+            panel.deleteLater()
+            self._assistant_panel = None
+
+    def open_assistant(self, *args) -> None:
+        """AI: the Assistant tab -- or, while it is off, where to turn it on."""
+        if self._assistant_panel is None:
+            self.command_line.echo(tr(
+                "The AI assistant is off. Turn it on in Options > AI Assistant."))
+            return
+        self._show_sidebar()
+        self._sidebar_tabs.setCurrentWidget(self._assistant_panel)
+        self._assistant_panel.input.setFocus()
 
     def xrefs_changed(self) -> None:
         """An xref was attached, detached, re-pathed, unloaded or reloaded:
@@ -4268,6 +4299,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
             d.register(name, lambda *a, n=name: self.tools.start_tool(n))
         d.register("BATTMAN", lambda *a: self._cmd_battman())
         # external references (#33): the palette, its command-line twin
+        d.register("AI", self.open_assistant)
         d.register("XREF", lambda *a: self.toggle_xrefs_panel())
         d.register("EXTERNALREFERENCES", lambda *a: self.toggle_xrefs_panel())
         d.register("-XREF", self._cmd_xref_cli)
@@ -6355,6 +6387,9 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         saving = getattr(self, "_save_worker", None)
         if saving is not None:
             saving.wait()
+        assistant = getattr(self, "_assistant_panel", None)
+        if assistant is not None:
+            assistant.shutdown()
         live = getattr(self, "_vp_live_worker", None)
         if live is not None:
             try:

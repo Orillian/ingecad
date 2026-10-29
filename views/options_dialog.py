@@ -101,6 +101,10 @@ class OptionsDialog(QDialog):
         self.tabs.addTab(self._drafting_tab(), tr("Drafting"))
         self.tabs.addTab(self._user_tab(), tr("User Preferences"))
         self.tabs.addTab(self._selection_tab(), tr("Selection"))
+        from views.ai_panel import AiOptionsPage
+
+        self._ai_page = AiOptionsPage(self, window)
+        self.tabs.addTab(self._ai_page, tr("AI Assistant"))
         # A plugin may add a page of its own (docs/plugins.md): built with
         # (dialog, window), and its apply() runs with the others on OK.
         self._plugin_pages: list = []
@@ -470,6 +474,7 @@ class OptionsDialog(QDialog):
             # that a language change needs a restart to reach everything
             self.window._set_language(self.language.currentData())
         self.window._update_mode_buttons()
+        self._ai_page.apply()
         # a plugin's page applies with the core ones -- on Apply as much as
         # on OK, or the button would silently skip half the dialog
         for page in self._plugin_pages:

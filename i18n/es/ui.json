@@ -2047,6 +2047,8 @@
   "Remove objects:": "Designe objetos a eliminar:",
   "*Invalid selection*": "*Selección no válida*",
   "Expects a point or Window/Last/Crossing/ALL/Fence/WPolygon/CPolygon/Previous/Undo/Add/Remove": "Se espera un punto o Ventana/Último/Captura/TODO/Borde/PolígonoVentana/PolígonoCaptura/Previo/Deshacer/Añadir/Eliminar",
+  "Expects a point or {options}": "Se espera un punto o {options}",
+  "Expects a single object.": "Se espera un solo objeto.",
   "First polygon point:": "Primer punto del polígono:",
   "Specify endpoint of line or [Undo]:": "Precise punto final de línea o [desHacer(U)]:",
   "Invalid point, polygon segments cannot intersect.": "Punto no válido, los segmentos del polígono no pueden cortarse.",

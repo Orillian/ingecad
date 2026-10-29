@@ -9,6 +9,7 @@ incremental overlay scene so drawing stays instant on any file size.
 from __future__ import annotations
 
 import math
+import re
 from typing import Optional
 
 import numpy as np
@@ -3541,6 +3542,23 @@ class ToolController(QObject):
         return lines
 
     # -- prompt input ----------------------------------------------------------
+    def _echo_not_understood(self) -> None:
+        """Typed text that is neither a point nor one of the prompt's
+        options, answered as the classic CAD does: an object prompt says
+        "*Invalid selection*" and lists what it expects, a point prompt
+        asks for a point or a keyword."""
+        echo = self.window.command_line.echo
+        source = getattr(self.tool, "_prompt_source", "") or ""
+        if not (self.tool.entity_picker and source.startswith("Select")):
+            echo(tr("Point or option keyword required."))
+            return
+        echo(tr("*Invalid selection*"))
+        options = re.search(r"\[([^\]]+)\]", self.current_prompt or "")
+        if options:
+            echo(tr("Expects a point or {options}", options=options.group(1)))
+        else:
+            echo(tr("Expects a single object."))
+
     def on_text(self, text: str) -> bool:
         """Prompt input while a tool is active. True if consumed."""
         if self._selecting_for is not None:
@@ -3636,7 +3654,7 @@ class ToolController(QObject):
                                              error=str(exc)))
             return True
         if point is None:
-            self.window.command_line.echo(tr("Invalid input."))
+            self._echo_not_understood()
             return True
         self._note_point((point.x, point.y))
         # a typed point releases the acquired points, as a picked one does

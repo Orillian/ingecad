@@ -42,6 +42,7 @@ def apply() -> None:
     _patch_suppressed_dimension_line_arrows()
     _patch_narrow_linear_dimension_text()
     _patch_narrow_linear_dimension_arrows()
+    _patch_outside_text_placement()
     _patch_two_line_angular_sector()
     _patch_three_point_angular_sector()
     _patch_arc_length_symbol_text()
@@ -438,6 +439,42 @@ def _patch_narrow_linear_dimension_arrows() -> None:
         self.__dict__["_ingecad_arrows_outside"] = bool(value)
 
     LinearDimension.arrows_outside = property(get, set_)
+
+
+def _patch_outside_text_placement() -> None:
+    """DIMTAD 2, "Outside": the text on the side of the dimension line
+    farthest from the defining points (DIMTAD, Command Reference).
+
+    ezdxf read 2 as "Above". Rafael's eighth review (min 16:20) asked for
+    the text to change side "como si hiciese una simetría", in the same
+    reading orientation, when the dimension goes to the other side of the
+    part: that is what Outside does, so the style's Vertical "Outside" or
+    a dimension's own override gives it.
+    """
+    from ezdxf.render.dim_linear import LinearDimension
+
+    original = LinearDimension.get_text_location
+    if getattr(original, "_ingecad_patch", False):
+        return
+
+    def get_text_location(self):
+        m = self.measurement
+        if m.text_valign == 2:
+            up = self.dim_line_vec.orthogonal()
+            side = 0.0
+            for origin in (self.ext1_line_start, self.ext2_line_start):
+                side = (origin - self.dim_line_start).dot(up)
+                if abs(side) > 1e-9:
+                    break
+            m.text_valign = 4 if side > 0.0 else 1
+            try:
+                return original(self)
+            finally:
+                m.text_valign = 2
+        return original(self)
+
+    get_text_location._ingecad_patch = True
+    LinearDimension.get_text_location = get_text_location
 
 
 def _patch_two_line_angular_sector() -> None:

@@ -1899,6 +1899,61 @@ class DimTextTranslateCommand(Command):
         document.dirty = True
 
 
+def _extend_dim_line_to_text(document, dim) -> None:
+    """Text slid along its dimension line past an extension line: the
+    line runs on under it (Rafael's eighth review, min 16: the text taken
+    off the part's lines, "la línea de cota obviamente crezca con ella")."""
+    import math
+
+    from ezdxf import bbox
+
+    from core.ezdxf_patches import aligned_angle
+
+    name = dim.dxf.get("geometry", None)
+    if not name or name not in document.doc.blocks:
+        return
+    block = document.doc.blocks.get(name)
+    texts = [e for e in block if e.dxftype() in ("MTEXT", "TEXT")]
+    loc, p1, p2 = (dim.dxf.get(a, None) for a in ("defpoint", "defpoint2",
+                                                   "defpoint3"))
+    if not texts or loc is None or p1 is None or p2 is None:
+        return
+    angle = math.radians(aligned_angle(dim, float(dim.dxf.get("angle", 0.0))))
+    ux, uy = math.cos(angle), math.sin(angle)
+
+    def along(x: float, y: float) -> float:
+        return (x - loc.x) * ux + (y - loc.y) * uy
+
+    lo, hi = sorted((along(p1.x, p1.y), along(p2.x, p2.y)))
+    box = bbox.extents(texts)
+    if not box.has_data:
+        return
+    corners = [(box.extmin.x, box.extmin.y), (box.extmin.x, box.extmax.y),
+               (box.extmax.x, box.extmin.y), (box.extmax.x, box.extmax.y)]
+    t_lo = min(along(x, y) for x, y in corners)
+    t_hi = max(along(x, y) for x, y in corners)
+    attribs = None
+    for e in block:
+        if e.dxftype() == "LINE" and e.dxf.layer.lower() != "defpoints":
+            a, b = e.dxf.start, e.dxf.end
+            if max(abs((q.x - loc.x) * -uy + (q.y - loc.y) * ux)
+                   for q in (a, b)) <= 1e-9 * max(1.0, abs(loc.x), abs(loc.y)) + 1e-9:
+                attribs = e.dxfattribs()
+                for key in ("handle", "owner", "start", "end"):
+                    attribs.pop(key, None)
+                break
+    if attribs is None:
+        return
+
+    def point(t: float):
+        return (loc.x + ux * t, loc.y + uy * t)
+
+    if t_hi > hi:
+        block.add_line(point(hi), point(t_hi), dxfattribs=attribs)
+    if t_lo < lo:
+        block.add_line(point(t_lo), point(lo), dxfattribs=attribs)
+
+
 class DimTextWithLineCommand(Command):
     """The text grip of a linear dimension under DIMTMOVE 0, AutoCAD's
     default: "moves the dimension line with dimension text" (DIMTMOVE). The
@@ -1938,6 +1993,7 @@ class DimTextWithLineCommand(Command):
         self._steps[0].do(document)
         if abs(self._along[0]) > 1e-12 or abs(self._along[1]) > 1e-12:
             translate_dim_text(document, self.dim, *self._along)
+            _extend_dim_line_to_text(document, self.dim)
         document.dirty = True
 
     def undo(self, document) -> None:
@@ -2094,6 +2150,24 @@ def _block_text_rotation(entity) -> float:
     return float(entity.dxf.get("rotation", 0.0))
 
 
+def _dim_line_crossed_part(dim, old_loc, nx: float, ny: float) -> bool:
+    """True when ``dim`` places its text Outside (DIMTAD 2) and its
+    dimension line moved from ``old_loc`` to the other side of the points
+    it measures."""
+    try:
+        if int(dim.override().get("dimtad", 0) or 0) != 2:
+            return False
+    except Exception:  # noqa: BLE001 -- an odd style: nothing to flip
+        return False
+    new_loc = dim.dxf.get("defpoint", None)
+    origin = dim.dxf.get("defpoint2", None)
+    if new_loc is None or origin is None:
+        return False
+    before = (old_loc.x - origin.x) * nx + (old_loc.y - origin.y) * ny
+    after = (new_loc.x - origin.x) * nx + (new_loc.y - origin.y) * ny
+    return before * after < 0.0
+
+
 class DimGripCommand(Command):
     """A grip moved one of a dimension's definition points.
 
@@ -2198,6 +2272,10 @@ class DimGripCommand(Command):
             setattr(d.dxf, attr, (point[0], point[1], z))
         d.render()
         _stamp_dim_block_byblock(document, d)
+        # DIMTAD 2, Outside: the text keeps to the side away from the part,
+        # so a line taken across the part takes the text to its other side
+        crossed = linear and old_loc is not None \
+            and _dim_line_crossed_part(d, old_loc, nx, ny)
         if old_text is not None:
             target_x, target_y = old_text
             if "defpoint" in self.points and linear and old_loc is not None:
@@ -2206,17 +2284,23 @@ class DimGripCommand(Command):
                 along = (new_loc.x - old_loc.x) * nx + (new_loc.y - old_loc.y) * ny
                 target_x += nx * along
                 target_y += ny * along
+                if crossed:
+                    off = (target_x - new_loc.x) * nx + (target_y - new_loc.y) * ny
+                    target_x -= 2.0 * off * nx
+                    target_y -= 2.0 * off * ny
             new_text = _block_text_insert(document, d.dxf.get("geometry", None))
             if new_text is not None:
                 _shift_block_text(document, d, target_x - new_text[0],
                                   target_y - new_text[1])
+            if linear:
+                _extend_dim_line_to_text(document, d)
         elif perp_old is not None:
             new_mid = d.dxf.get("text_midpoint", None)
             new_loc = d.dxf.get("defpoint", None)
             if new_mid is not None and new_loc is not None:
                 perp_new = (new_mid.x - new_loc.x) * nx \
                     + (new_mid.y - new_loc.y) * ny
-                shift = perp_old - perp_new
+                shift = (-perp_old if crossed else perp_old) - perp_new
                 if abs(shift) > 1e-9:
                     translate_dim_text(document, d, nx * shift, ny * shift,
                                        set_user_flag=False)

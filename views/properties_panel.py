@@ -637,9 +637,44 @@ def _dimension_rows(panel, e):
             lambda e: e.dxf.get("text_rotation", 0.0),
             lambda v: panel._set_prop("text_rotation", v)),
     ]
+    if int(e.dxf.get("dimtype", 0)) & 7 in (0, 1):
+        # AutoCAD's Text > Vertical position: Outside puts the text on the
+        # side away from the part (Rafael's eighth review, min 16:20)
+        rows.append(Row(tr("Text pos vert"), "combo",
+                        lambda e: _dim_var(e, "dimtad", 0),
+                        lambda v: _set_dim_override(panel, "dimtad", v),
+                        [(tr(label), value) for label, value in
+                         (("Centered", 0), ("Above", 1), ("Outside", 2),
+                          ("JIS", 3), ("Below", 4))]))
     rows += _pt_rows(panel, "text_midpoint", tr("Text position"))
     rows.append(_annotative_row(panel))
     return (tr("Dimension"), rows)
+
+
+def _dim_var(e, name: str, default):
+    """A dimension variable as this dimension draws it: its own override,
+    else its style's."""
+    try:
+        value = e.override().get(name, default)
+    except Exception:  # noqa: BLE001 -- an odd style: the default
+        return default
+    return default if value is None else value
+
+
+def _set_dim_override(panel, name: str, value) -> None:
+    """Write ``name`` as a dimension override (XDATA ACAD DSTYLE, which
+    AutoCAD reads as its own) on the selected dimensions and redraw them."""
+    def mutate():
+        from core.modify import _rerender_dimension
+
+        for ent in panel._active():
+            if ent.dxftype() != "DIMENSION":
+                continue
+            override = ent.override()
+            override[name] = value
+            override.commit()
+            _rerender_dimension(panel._document, ent)
+    panel._in_place(mutate, regen=True)
 
 
 def _set_attribute(panel, prop: str, value: str) -> None:

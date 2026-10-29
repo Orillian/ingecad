@@ -253,6 +253,39 @@ class PluginManager:
             self.scan_dir(folder, bundled)
         return sorted(self.loaded)
 
+    @property
+    def user_dir(self) -> Path:
+        """Where the user's own plugins live (the extension center installs
+        there)."""
+        return next(folder for folder, bundled in self._dirs if not bundled)
+
+    def forget(self, plugin_id: str) -> None:
+        """Turn the plugin off and drop it and its modules, as if it had
+        never been found -- before its folder is replaced or deleted."""
+        self.deactivate(plugin_id)
+        self.loaded.pop(plugin_id, None)
+        module_name = f"ingecad_plugin_{plugin_id}"
+        for name in [n for n in sys.modules
+                     if n == module_name or n.startswith(module_name + ".")]:
+            del sys.modules[name]
+
+    def reload(self, plugin_id: str) -> Optional[LoadedPlugin]:
+        """Load a user plugin afresh from its folder (just installed or
+        updated); it is switched on again if it was on. None if gone."""
+        was_active = self.is_active(plugin_id)
+        loaded = self.loaded.get(plugin_id)
+        if loaded is not None and loaded.bundled:
+            return loaded                 # the app's own never change here
+        self.forget(plugin_id)
+        folder = self.user_dir / plugin_id
+        if not folder.is_dir():
+            return None
+        importlib.invalidate_caches()     # the folder's listing changed
+        self.loaded[plugin_id] = loaded = load_plugin(folder, bundled=False)
+        if was_active:
+            self.activate(plugin_id)
+        return loaded
+
     def problems(self) -> list[tuple[str, str]]:
         """``(id, reason)`` for every plugin that cannot be turned on."""
         return [(pid, p.reason) for pid, p in sorted(self.loaded.items())

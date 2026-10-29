@@ -1927,10 +1927,15 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self._script_runner = None
 
     def _cmd_plugins(self, *args) -> None:
-        """PLUGINS: the manager (Tools > Plugins...)."""
-        from views.plugins_dialog import PluginsDialog
-
-        PluginsDialog(self).exec()
+        """PLUGINS (Tools > Plugins...): the Extensions tab of the sidebar."""
+        panel = getattr(self, "_extensions_panel", None)
+        if panel is None:
+            return
+        self._show_sidebar()
+        if self._sidebar_tabs.currentWidget() is panel:
+            panel.ensure_catalog()
+        self._sidebar_tabs.setCurrentWidget(panel)   # asks for the catalog
+        panel.refresh()
 
     def register_command(self, name: str, handler) -> None:
         self.dispatcher.register(name, handler)
@@ -1990,7 +1995,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self.addToolBar(Qt.TopToolBarArea, bar)
         self._plugin_toolbars[spec.id] = bar
         # Hidden from the right-click list, it stays hidden: the plugin's own
-        # toolbar setting answers that (Plugins dialog), one place. Later,
+        # toolbar setting answers that (Extensions tab), one place. Later,
         # not now -- the menu is still using the bar's action.
         bar.toggleViewAction().triggered.connect(
             lambda checked, pid=spec.id: QTimer.singleShot(
@@ -3822,6 +3827,9 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         from views.xrefs_panel import XrefsPanel
 
         self._xrefs_panel = XrefsPanel(self)     # External References (#33)
+        from views.extensions_panel import ExtensionsPanel
+
+        self._extensions_panel = ExtensionsPanel(self)   # the extension center
 
         tabs = QTabWidget(self)
         tabs.setObjectName("sidebar_tabs")
@@ -3830,6 +3838,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         tabs.addTab(self._properties_panel, tr("Properties"))
         tabs.addTab(self._styles_panel, tr("Palette"))
         tabs.addTab(self._xrefs_panel, tr("Xrefs"))
+        tabs.addTab(self._extensions_panel, tr("Extensions"))
+        tabs.currentChanged.connect(self._sidebar_tab_changed)
         self._sidebar_tabs = tabs
         self._assistant_panel = None
         self._mcp_bridge = None
@@ -3901,6 +3911,14 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         btn.move(x, max(0, y))
         btn.raise_()
         btn.setVisible(getattr(self, "_clean_screen_saved", None) is None)
+
+    def _sidebar_tab_changed(self, _index: int) -> None:
+        """The catalog is fetched the first time the Extensions tab is
+        looked at -- never at start-up, never for a user who does not."""
+        panel = getattr(self, "_extensions_panel", None)
+        if panel is not None and self._sidebar_tabs.currentWidget() is panel:
+            panel.ensure_catalog()
+            panel.refresh()
 
     def _sidebar_folded(self) -> bool:
         return not self._act_sidebar.isChecked()
@@ -6510,6 +6528,9 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         assistant = getattr(self, "_assistant_panel", None)
         if assistant is not None:
             assistant.shutdown()
+        extensions = getattr(self, "_extensions_panel", None)
+        if extensions is not None:
+            extensions.shutdown()
         bridge = getattr(self, "_mcp_bridge", None)
         if bridge is not None:
             bridge.close()

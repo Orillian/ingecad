@@ -239,29 +239,43 @@ def test_the_document_hook_hears_new_and_opened_drawings(qapp):
         win.close()
 
 
-def test_the_manager_dialog_toggles_a_plugin(qapp):
-    from PySide6.QtCore import QSettings, Qt
-
-    from views.plugins_dialog import PluginsDialog
+def test_the_extensions_tab_toggles_a_plugin(qapp):
+    """The manager is the sidebar's Extensions tab (it was a modal dialog):
+    one card per plugin, an unavailable one greyed with the reason."""
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QCheckBox, QFrame, QLabel, QPushButton
 
     win = _window(qapp)
     settings = QSettings()
+    panel = win._extensions_panel
+    panel._asked = True                  # no catalog: this test is offline
     try:
-        dialog = PluginsDialog(win)
-        rows = {dialog.list.item(i).data(Qt.UserRole): dialog.list.item(i)
-                for i in range(dialog.list.count())}
-        assert {"ejemplo", "sin_dependencia"} <= set(rows)    # plus the bundled ones
-        assert not (rows["sin_dependencia"].flags() & Qt.ItemIsUserCheckable)
-        assert "needs ingecad_no_such_module_xyz" in rows["sin_dependencia"].text()
-        rows["ejemplo"].setCheckState(Qt.Checked)
+        panel.refresh()
+
+        def toggle(pid):
+            return panel.findChild(QPushButton, f"ext_toggle_{pid}")
+
+        assert toggle("ejemplo") is not None and toggle("sin_dependencia") is not None
+        assert not toggle("sin_dependencia").isEnabled()
+        card = panel.findChild(QFrame, "ext_card_sin_dependencia")
+        assert any("needs ingecad_no_such_module_xyz" in label.text()
+                   for label in card.findChildren(QLabel))
+        toggle("ejemplo").click()
         assert win.plugins.is_active("ejemplo")
         assert "HELLO" in win.dispatcher._commands
-        rows["ejemplo"].setCheckState(Qt.Unchecked)
+        assert str(settings.value("plugins/ejemplo/enabled")).lower() == "true"
+        box = panel.findChild(QCheckBox, "ext_toolbar_ejemplo")
+        box.setChecked(True)
+        assert win.plugins.toolbar_enabled("ejemplo")
+        assert "plugin_ejemplo_toolbar" in _snapshot(win)["toolbars"]
+        box.setChecked(False)
+        toggle("ejemplo").click()
         assert not win.plugins.is_active("ejemplo")
         assert "HELLO" not in win.dispatcher._commands
         assert str(settings.value("plugins/ejemplo/enabled")).lower() == "false"
     finally:
         settings.remove("plugins/ejemplo/enabled")
+        settings.remove("plugins/ejemplo/toolbar")
         win.plugins.deactivate("ejemplo")
         win.close()
 

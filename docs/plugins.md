@@ -9,9 +9,54 @@ to "no trace left" (`tests/test_plugins.py`).
 
 Bundled plugins live in `plugins/<id>/` and ship with the app, on by
 default. A plugin's **toolbar is off by default** -- the menu is what a
-plugin adds; the user switches the toolbar on in **Tools ▸ Plugins…**
-("Show this plugin's toolbar"), and the choice is remembered. A user's own live in `~/.config/IngeCAD/plugins/<id>/`, off until
-enabled in **Tools ▸ Plugins…** (command `PLUGINS`).
+plugin adds; the user switches the toolbar on in the **Extensions** tab of
+the right sidebar ("Show this plugin's toolbar"), and the choice is
+remembered. A user's own live in `~/.config/IngeCAD/plugins/<id>/`, off
+until enabled in the same tab (**Tools ▸ Plugins…**, command `PLUGINS`).
+
+## The extension center
+
+The **Extensions** tab lists three sections: *Included* (the bundled
+plugins), *Installed* (the user's own) and *Available* (the catalog). It
+reads `catalog.json` and `reviewed.toml` from
+`github.com/ingelibre/ingecad-extensions` the first time the tab is
+opened -- never at start-up -- and keeps the last good copy beside the
+plugins folder (`extension-catalog.json`) for when there is no network.
+Offline, the installed and included plugins are still listed and managed.
+
+A catalog entry (format 1, the same schema as IngeTrazo's):
+
+```json
+{"id": "curvas", "version": "0.3", "author": "...", "author_url": "https://...",
+ "license": "GPL-3.0-or-later", "repository": "https://github.com/...",
+ "download": "https://github.com/.../curvas-0.3.zip",
+ "sha256": "<64 hex digits of the zip>", "ingecad": "0.6.9",
+ "tags": ["topography"], "screenshot": null,
+ "name": {"en": "...", "es": "...", "pt": "..."},
+ "summary": {"en": "...", "es": "...", "pt": "..."}}
+```
+
+`ingecad` is the minimum IngeCAD version. `tags` take `topography`,
+`civil`, `architecture`, `structures`, `gis`, `import-export`, `drawing`,
+`annotation`, `productivity`, `education`, `other`. The `download` is an
+HTTPS `.zip` holding **one folder with `__init__.py`** (a GitHub archive's
+`<repo>-main/` wrapper is fine), or a single `<id>.py`; it is installed as
+`plugins/<id>/` whatever the folder was called, so `PLUGIN.id` must equal
+the catalog `id`. Nothing is installed unless the zip hashes to `sha256`,
+and an archive with an absolute path, `..`, a drive letter or a symlink is
+refused whole. `reviewed.toml` lists `[<id>] sha256 = "..."`: the card
+reads **Reviewed** only while the catalog's digest is the one reviewed;
+any other version reads **Community** and asks before installing. The id
+of a bundled plugin cannot be taken.
+
+The center writes `extension.json` into each folder it installs and
+updates or deletes only such folders; a plugin copied by hand is listed
+and can be turned on or off, never deleted. Installing turns the plugin on
+at once; an update reloads it (its old modules dropped) and keeps it on or
+off as it was; uninstalling turns it off, deletes the folder and forgets
+its settings. `INGECAD_EXTENSIONS_BASE=file:///path/to/checkout` points
+the center at a local copy of the catalog repository, for whoever
+maintains it.
 
 ## The smallest plugin
 

@@ -6,6 +6,11 @@ Attributes of the chosen block definition in a list (Tag / Prompt / Default /
 Mode), Move Up / Move Down (the prompt order is the block order), Edit (the
 Attribute Definition dialog on that definition), Remove and Sync (ATTSYNC on
 every reference). Every change is a Command through the window's history.
+
+"Apply changes to existing references" (AutoCAD's BATTMAN setting, on by
+default) carries each change to the blocks already inserted, in the same
+undo step: Rafael's eighth review (min 32:40) removed an attribute he no
+longer wanted and it stayed on every block he had placed.
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -24,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from core import attributes as att
+from core.commands import CompositeCommand
 from core.i18n import tr
 
 
@@ -83,6 +90,10 @@ class BattmanDialog(QDialog):
 
         self.found = QLabel("", self)
         root.addWidget(self.found)
+        self.apply_to_references = QCheckBox(
+            tr("Apply changes to existing references"), self)
+        self.apply_to_references.setChecked(True)
+        root.addWidget(self.apply_to_references)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close, self)
         buttons.rejected.connect(self.reject)
@@ -121,7 +132,12 @@ class BattmanDialog(QDialog):
                 max(0, min(self.table.currentRow(), len(defs) - 1))
             self.table.setCurrentCell(row, 0)
 
-    def _after(self, command, select_row: int = -1) -> None:
+    def _after(self, command, select_row: int = -1,
+               carry: bool = False) -> None:
+        if carry and self.apply_to_references.isChecked():
+            command = CompositeCommand(command.name, [
+                command, att.SyncAttribsCommand(self.document,
+                                                self.block_name())])
         self.window.history.execute(command)
         self.window.tools.after_history_change(command)
         self.window.tools.changed.emit()
@@ -137,7 +153,8 @@ class BattmanDialog(QDialog):
         order = list(defs)
         order[row], order[target] = order[target], order[row]
         block = self.document.doc.blocks.get(self.block_name())
-        self._after(att.ReorderAttdefsCommand(block, order), target)
+        self._after(att.ReorderAttdefsCommand(block, order), target,
+                    carry=True)
 
     def move_up(self) -> None:
         self._move(-1)
@@ -177,7 +194,7 @@ class BattmanDialog(QDialog):
             changes.append((attdef, "style", v["style"]))
         if changes:
             self._after(att.EditAttribsCommand(changes, name="BATTMAN"),
-                        self.table.currentRow())
+                        self.table.currentRow(), carry=True)
 
     def remove(self) -> None:
         attdef = self.current()
@@ -190,7 +207,7 @@ class BattmanDialog(QDialog):
                 != QMessageBox.Yes:
             return
         block = self.document.doc.blocks.get(self.block_name())
-        self._after(att.UnlinkEntitiesCommand(block, [attdef]))
+        self._after(att.UnlinkEntitiesCommand(block, [attdef]), carry=True)
 
     def sync(self) -> None:
         command = att.SyncAttribsCommand(self.document, self.block_name())

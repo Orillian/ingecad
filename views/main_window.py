@@ -1489,6 +1489,10 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         cmd_item(insert_menu, tr("Block..."), "INSERT")
         cmd_item(insert_menu, tr("Create Block..."), "BLOCK")
         cmd_item(insert_menu, tr("Define Attributes..."), "ATTDEF", icon=False)
+        # BATTMAN beside where attributes are made: under Modify > Object >
+        # Attribute alone, Rafael never found how to delete one (min 32:40)
+        cmd_item(insert_menu, tr("Block Attribute Manager..."), "BATTMAN",
+                 icon=False)
         insert_menu.addSeparator()
         # Classic AutoCAD: Insert > External Reference (XATTACH) and the
         # External References palette (#33).

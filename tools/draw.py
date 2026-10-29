@@ -552,6 +552,34 @@ class ArcTool(Tool):
             direction = math.degrees(math.atan2(point[1] - self._start[1],
                                                 point[0] - self._start[0]))
             self._try(lambda: actions.arc_sed(self._start, self._end, direction))
+        elif state in self._PICKED_VALUE:
+            # a value given with the mouse, measured as AutoCAD 2026 did
+            # side by side (a click here used to do nothing)
+            self._try(lambda: self._value_geom(point))
+
+    #: The value prompts a click answers, and the point it is measured
+    #: from: the included angle is the direction base -> cursor from 0 deg
+    #: (+X); the chord and the radius are distances from base to cursor.
+    _PICKED_VALUE = {"SC_ANGLE": "center", "SC_LENGTH": "start",
+                     "SE_RADIUS": "end", "SE_ANGLE": "start"}
+
+    def _value_base(self) -> Point:
+        return {"center": self._center, "start": self._start,
+                "end": self._end}[self._PICKED_VALUE[self._state]]
+
+    def _value_geom(self, point: Point):
+        base = self._value_base()
+        state = self._state
+        if state in ("SC_ANGLE", "SE_ANGLE"):
+            angle = math.degrees(math.atan2(point[1] - base[1],
+                                            point[0] - base[0])) % 360.0
+            if state == "SC_ANGLE":
+                return actions.arc_sca(self._start, self._center, angle)
+            return actions.arc_sea(self._start, self._end, angle)
+        distance = math.dist(base, point)
+        if state == "SC_LENGTH":
+            return actions.arc_scl(self._start, self._center, distance)
+        return actions.arc_ser(self._start, self._end, distance)
 
     def on_option(self, text: str) -> bool:
         # The resolver first: it turns the localized keyword, or
@@ -657,6 +685,14 @@ class ArcTool(Tool):
                     self._start, self._end, direction))
             if state == "SE_KEY":
                 return _arc_preview(self._sce_geom_from(cursor, self._end))
+            if state in self._PICKED_VALUE:
+                # the elastic line from the point the value is measured
+                # from, and the arc that value gives
+                rubber = [(self._value_base(), cursor)]
+                try:
+                    return rubber + _arc_preview(self._value_geom(cursor))
+                except ValueError:
+                    return rubber
         except ValueError:
             pass
         anchor = self._start or self._center

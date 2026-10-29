@@ -1329,6 +1329,24 @@ class FilletTool(Tool):
         self._first_pick = None
         self.prompt(self.OPTIONS)
 
+    def _ask_second(self) -> None:
+        self.prompt("Select second object or shift-select to apply corner "
+                    "or [Radius]:")
+
+    def _resume(self) -> None:
+        """Back from the radius to the prompt it was asked at."""
+        target = getattr(self, "_resume_to", None)
+        self._resume_to = None
+        if target == "second":
+            self._await = None
+            self._ask_second()
+        elif target == "polyline":
+            self._await = "polyline"
+            self.prompt("Select 2D polyline or [Radius]:")
+        else:
+            self._await = None
+            self._first_prompt()
+
     def _after_fillet(self) -> None:
         """One pair done: Multiple asks again, otherwise the command ends."""
         self._done += 1
@@ -1342,21 +1360,17 @@ class FilletTool(Tool):
 
         t = self.option(text) or text.strip().upper()
         if self._await == "radius":
-            if not text.strip():
-                self._await = None
-                self._first_prompt()
-                return True
-            try:
-                r = float(text)
-            except ValueError:
-                self.ctx.echo(tr("Requires a positive number."))
-                return True
-            if r < 0:
-                self.ctx.echo(tr("Value must be positive."))
-                return True
-            type(self).radius = r
-            self._await = None
-            self._first_prompt()
+            if text.strip():
+                try:
+                    r = float(text)
+                except ValueError:
+                    self.ctx.echo(tr("Requires a positive number."))
+                    return True
+                if r < 0:
+                    self.ctx.echo(tr("Value must be positive."))
+                    return True
+                type(self).radius = r
+            self._resume()
             return True
         if self._await == "trim":
             if t.startswith("T"):
@@ -1369,9 +1383,19 @@ class FilletTool(Tool):
             self._await = None
             self._first_prompt()
             return True
+        if t in ("R", "RADIUS") and (self._first is not None
+                                     or self._await == "polyline"):
+            # AutoCAD 2026 (group D) offers Radius at the second object and
+            # at the polyline too, and comes back to that same prompt
+            self._resume_to = "second" if self._first is not None else "polyline"
+            self._await = "radius"
+            self.prompt("Specify fillet radius <{r}>:",
+                        r=self._fmt(type(self).radius))
+            return True
         if self._first is not None:
             return False
         if t in ("R", "RADIUS"):
+            self._resume_to = None
             self._await = "radius"
             self.prompt("Specify fillet radius <{r}>:",
                         r=self._fmt(type(self).radius))
@@ -1387,7 +1411,7 @@ class FilletTool(Tool):
             return True
         if t in ("P", "POLYLINE"):
             self._await = "polyline"
-            self.prompt("Select 2D polyline:")
+            self.prompt("Select 2D polyline or [Radius]:")
             return True
         if t in ("U", "UNDO"):
             if self._done:
@@ -1418,7 +1442,7 @@ class FilletTool(Tool):
         if self._first is None:
             self._first = entity
             self._first_pick = point
-            self.prompt("Select second object or shift-select to apply corner:")
+            self._ask_second()
             return
         if entity is self._first and entity.dxftype() != "LWPOLYLINE":
             self.ctx.echo(tr("Pick a different object."))

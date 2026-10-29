@@ -500,7 +500,7 @@ def test_fillet_prompts_follow_autocad():
     assert FilletTool.radius == 3.0
     assert h.prompts[-1].startswith("Select first object or [Undo/")
     tool.on_point((10, 0))
-    assert h.prompts[-1] == "Select second object or shift-select to apply corner:"
+    assert h.prompts[-1] == "Select second object or shift-select to apply corner or [Radius]:"
 
 
 def test_fillet_shift_on_the_second_pick_makes_a_corner():
@@ -567,7 +567,7 @@ def test_fillet_polyline_rounds_every_corner():
     pl = h.msp.add_lwpolyline([(0, 0), (20, 0), (20, 10), (0, 10)], close=True)
     tool = _fillet_tool(h, 2.0)
     tool.on_option("P")
-    assert h.prompts[-1] == "Select 2D polyline:"
+    assert h.prompts[-1] == "Select 2D polyline or [Radius]:"
     tool.on_point((10, 0))
     assert "4 lines were filleted" in h.prompts
     new = next(iter(h.msp.query("LWPOLYLINE")))

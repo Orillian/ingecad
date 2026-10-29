@@ -244,6 +244,27 @@ class ChamferTool(Tool):
         self.entity_picker = True
         self.prompt(self.OPTIONS)
 
+    def _ask_second(self) -> None:
+        self.prompt("Select second line or shift-select to apply corner "
+                    "or [Distance/Angle/Method]:")
+
+    def _ask_polyline(self) -> None:
+        self.prompt("Select 2D polyline or [Distance/Angle/Method]:")
+
+    def _resume(self) -> None:
+        """Back from a setting to the prompt it was asked at."""
+        target = getattr(self, "_resume_to", None)
+        self._resume_to = None
+        if target == "second":
+            self._await = None
+            self._ask_second()
+        elif target == "polyline":
+            self._await = "polyline"
+            self._ask_polyline()
+        else:
+            self._await = None
+            self._first_prompt()
+
     def _after(self) -> None:
         self._done += 1
         if self._multiple:
@@ -281,8 +302,7 @@ class ChamferTool(Tool):
                 return True
             cls.dist2 = value
             cls.method = "D"
-            self._await = None
-            self._first_prompt()
+            self._resume()
             return True
         if self._await == "length":
             value = self._value(text, cls.length)
@@ -299,8 +319,7 @@ class ChamferTool(Tool):
                 return True
             cls.angle = value
             cls.method = "A"
-            self._await = None
-            self._first_prompt()
+            self._resume()
             return True
         if self._await == "method":
             if token in ("D", "DISTANCE"):
@@ -310,8 +329,7 @@ class ChamferTool(Tool):
             elif text.strip():
                 self.ctx.echo(tr("Requires Distance or Angle."))
                 return True
-            self._await = None
-            self._first_prompt()
+            self._resume()
             return True
         if self._await == "trim":
             if token.startswith("T"):
@@ -321,11 +339,30 @@ class ChamferTool(Tool):
             elif text.strip():
                 self.ctx.echo(tr("Requires Trim or No trim."))
                 return True
-            self._await = None
-            self._first_prompt()
+            self._resume()
             return True
-        if self._first is not None:
+        if self._first is not None or self._await == "polyline":
+            # AutoCAD 2026 (group D): the second line, and the polyline,
+            # offer [Distance/Angle/Method] and come back to that prompt
+            self._resume_to = "second" if self._first is not None else "polyline"
+            if token in ("D", "DISTANCE"):
+                self._await = "d1"
+                self.prompt("Specify first chamfer distance <{d}>:",
+                            d=f"{cls.dist1:g}")
+                return True
+            if token in ("A", "ANGLE"):
+                self._await = "length"
+                self.prompt("Specify chamfer length on the first line <{d}>:",
+                            d=f"{cls.length:g}")
+                return True
+            if token in ("M", "METHOD"):
+                self._await = "method"
+                self.prompt("Enter trim method [Distance/Angle] <{m}>:",
+                            m=tr("Angle") if cls.method == "A" else tr("Distance"))
+                return True
+            self._resume_to = None
             return False
+        self._resume_to = None
         if token in ("D", "DISTANCE"):
             self._await = "d1"
             self.prompt("Specify first chamfer distance <{d}>:",
@@ -353,7 +390,7 @@ class ChamferTool(Tool):
             return True
         if token in ("P", "POLYLINE"):
             self._await = "polyline"
-            self.prompt("Select 2D polyline:")
+            self._ask_polyline()
             return True
         if token in ("U", "UNDO"):
             if self._done:
@@ -383,7 +420,7 @@ class ChamferTool(Tool):
         if self._first is None:
             self._first = entity
             self._first_pick = point
-            self.prompt("Select second line or shift-select to apply corner:")
+            self._ask_second()
             return
         if entity is self._first and entity.dxftype() == "LINE":
             self.ctx.echo(tr("Pick a different line."))

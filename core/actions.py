@@ -1146,12 +1146,22 @@ class CreateBlockCommand(Command):
     name = "BLOCK"
     touches_blocks = True
 
-    def __init__(self, block_name: str, base_point, entities) -> None:
+    def __init__(self, block_name: str, base_point, entities,
+                 redefine: bool = False) -> None:
         self.block_name = block_name
         self.base = base_point
         self.sources = list(entities)
         self.insert = None
         self._defined = False
+        # A name the drawing already has, answered Yes to "Redefine it?":
+        # the definition takes the selection and every reference shows it.
+        # Without that answer the old content is kept (the reference
+        # placed is to the existing block, as before).
+        self.redefine = redefine
+        self._old: list = []
+        self._old_base = None
+        if redefine:
+            self.needs_regen = True         # every reference changes at once
 
     def do(self, document) -> None:
         doc = document.doc
@@ -1163,10 +1173,23 @@ class CreateBlockCommand(Command):
             for e in self.sources:
                 blk.add_entity(e.copy())
             self._defined = True
+        elif self.redefine:
+            blk = doc.blocks.get(self.block_name)
+            # unlinked, not destroyed: undo puts the very same entities back
+            self._old = list(blk)
+            for e in self._old:
+                blk.unlink_entity(e)
+            self._old_base = blk.block.dxf.base_point
+            blk.block.dxf.base_point = (self.base[0], self.base[1], 0)
+            for e in self.sources:
+                blk.add_entity(e.copy())
         for e in self.sources:
             msp.unlink_entity(e)
         self.insert = msp.add_blockref(
             self.block_name, (self.base[0], self.base[1]))
+        # a new object: on the current layer with the current properties,
+        # like any other (it landed on layer 0 whatever CLAYER said)
+        dress_new_entity(document, self.insert)
         # Its attributes, at their defaults: a reference carries its own
         # ATTRIBs, and without them the definitions just packed vanished
         # from the drawing -- Rafael's "Rafa" was nowhere to be seen (#88)
@@ -1187,11 +1210,21 @@ class CreateBlockCommand(Command):
         if self._defined and self.block_name in doc.blocks:
             doc.blocks.delete_block(self.block_name, safe=False)
             self._defined = False
+        elif self.redefine and self._old_base is not None:
+            blk = doc.blocks.get(self.block_name)
+            for e in list(blk):
+                blk.unlink_entity(e)
+                doc.entitydb.delete_entity(e)
+            for e in self._old:
+                blk.add_entity(e)
+            blk.block.dxf.base_point = self._old_base
+            self._old, self._old_base = [], None
         document.dirty = True
 
 
-def create_block(block_name, base_point, entities) -> CreateBlockCommand:
-    return CreateBlockCommand(block_name, base_point, entities)
+def create_block(block_name, base_point, entities,
+                 redefine: bool = False) -> CreateBlockCommand:
+    return CreateBlockCommand(block_name, base_point, entities, redefine)
 
 
 class DefineBlockFromFileCommand(Command):

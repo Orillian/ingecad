@@ -19,29 +19,78 @@ class BlockTool(Tool):
 
     wants_selection = True
 
+    REDEFINE = 'Block "{name}" already exists. Redefine it? [Yes/No] <No>:'
+
     def start(self) -> None:
         self.name = "BLOCK"
         self._entities: list = []
         self._block_name: str | None = None
+        self._redefine = False
+        self._await: str | None = None
 
     def on_selection(self, entities: list) -> None:
         if not entities:
             self.ctx.finish()
             return
         self._entities = entities
+        self._ask_name()
+
+    def _ask_name(self) -> None:
         name = self.ctx.ask_text(tr("Block name:"), "")
         if not name or not name.strip():
             self.ctx.echo(tr("*Cancel*"))
             self.ctx.finish()
             return
         self._block_name = name.strip()
+        if self._exists(self._block_name):
+            # AutoCAD asks before touching a definition every reference
+            # shares; ours swapped the selection for the OLD content
+            # without a word
+            self._await = "redefine"
+            self.entity_picker = True
+            self.prompt(self.REDEFINE, name=self._block_name)
+            return
         self.prompt("Specify insertion base point:")
 
+    def _exists(self, name: str) -> bool:
+        document = getattr(self.ctx.services, "document", None)
+        if document is None:
+            document = getattr(getattr(self.ctx.services, "window", None),
+                               "document", None)
+        return document is not None and name in document.doc.blocks
+
+    def on_option(self, text: str) -> bool:
+        if self._await != "redefine":
+            return False
+        answer = self.option(text) if text.strip() else "N"
+        if answer not in ("Y", "N"):
+            return False
+        self._await = None
+        self.entity_picker = False
+        if answer == "Y":
+            self._redefine = True
+            self.prompt("Specify insertion base point:")
+        else:
+            self._ask_name()              # No: a name again, as -BLOCK does
+        return True
+
+    def on_enter(self) -> None:
+        if self._await == "redefine":
+            self.on_option("")            # <No>
+            return
+        self.ctx.finish()
+
     def on_point(self, point: Point) -> None:
+        if self._await == "redefine":
+            return
         if self._block_name and self._entities:
-            self.ctx.execute(
-                actions.create_block(self._block_name, point, self._entities))
-            self.ctx.echo(tr("Block '{name}' created.", name=self._block_name))
+            self.ctx.execute(actions.create_block(
+                self._block_name, point, self._entities,
+                redefine=self._redefine))
+            if self._redefine:
+                self.ctx.echo(tr("Block {name} redefined.", name=self._block_name))
+            else:
+                self.ctx.echo(tr("Block '{name}' created.", name=self._block_name))
         self.ctx.finish()
 
 

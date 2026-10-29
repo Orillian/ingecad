@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
-"""The Extensions tab of the right sidebar: the extension center.
+"""The extension center: the extension manager window's contents.
 
 Three sections, one card per plugin: *Included* (the ones that ship with
 IngeCAD: Topography, Terrain), *Installed* (the user's own, from the
@@ -63,8 +63,8 @@ class _Worker(QThread):
 
 
 class ExtensionsPanel(QWidget):
-    def __init__(self, window) -> None:
-        super().__init__(window)
+    def __init__(self, window, parent=None) -> None:
+        super().__init__(parent if parent is not None else window)
         self.window = window
         self.manager = window.plugins
         self.snapshot: center.CatalogSnapshot | None = None

@@ -5,7 +5,7 @@
 No network: the catalog and the downloads are served from memory by a
 stand-in for ``core.extension_center._get``, and the user's plugins folder
 is a temporary one. Through the window wherever there is a window to go
-through: PLUGINS opens the Extensions tab, the buttons are clicked.
+through: PLUGINS opens the extension manager, the buttons are clicked.
 """
 from __future__ import annotations
 
@@ -129,11 +129,14 @@ def _window(qapp):
 
 
 def _open_tab(win):
-    """PLUGINS, as typed: the sidebar shows the Extensions tab and the
-    catalog is asked for; wait for the answer."""
+    """PLUGINS, as typed: the extension manager opens in a window of its
+    own (not a sidebar tab) and asks for the catalog; wait for the answer."""
     win.dispatcher.submit("PLUGINS")
     panel = win._extensions_panel
-    assert win._sidebar_tabs.currentWidget() is panel
+    assert win._extensions_window.isAncestorOf(panel)
+    assert win._extensions_window.isVisible()
+    assert panel not in [win._sidebar_tabs.widget(i)
+                         for i in range(win._sidebar_tabs.count())]
     panel.wait()
     return panel
 

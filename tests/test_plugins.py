@@ -240,7 +240,7 @@ def test_the_document_hook_hears_new_and_opened_drawings(qapp):
 
 
 def test_the_extensions_tab_toggles_a_plugin(qapp):
-    """The manager is the sidebar's Extensions tab (it was a modal dialog):
+    """The extension manager (a window of its own, as IngeTrazo's):
     one card per plugin, an unavailable one greyed with the reason."""
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QCheckBox, QFrame, QLabel, QPushButton

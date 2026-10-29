@@ -9,17 +9,17 @@ to "no trace left" (`tests/test_plugins.py`).
 
 Bundled plugins live in `plugins/<id>/` and ship with the app, on by
 default. A plugin's **toolbar is off by default** -- the menu is what a
-plugin adds; the user switches the toolbar on in the **Extensions** tab of
-the right sidebar ("Show this plugin's toolbar"), and the choice is
+plugin adds; the user switches the toolbar on in the **extension manager**
+("Show this plugin's toolbar"), and the choice is
 remembered. A user's own live in `~/.config/IngeCAD/plugins/<id>/`, off
-until enabled in the same tab (**Tools ▸ Plugins…**, command `PLUGINS`).
+until enabled in the same window (**Tools ▸ Plugins…**, command `PLUGINS`).
 
 ## The extension center
 
-The **Extensions** tab lists three sections: *Included* (the bundled
+The **extension manager** (a window of its own, as in IngeTrazo) lists three sections: *Included* (the bundled
 plugins), *Installed* (the user's own) and *Available* (the catalog). It
 reads `catalog.json` and `reviewed.toml` from
-`github.com/ingelibre/ingecad-extensions` the first time the tab is
+`github.com/ingelibre/ingecad-extensions` the first time the window is
 opened -- never at start-up -- and keeps the last good copy beside the
 plugins folder (`extension-catalog.json`) for when there is no network.
 Offline, the installed and included plugins are still listed and managed.

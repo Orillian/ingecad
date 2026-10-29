@@ -2242,7 +2242,7 @@
   "Catalog unavailable: {reason}": "Catálogo no disponible: {reason}",
   "Offline: catalog saved on {date}.": "Sin conexión: catálogo guardado el {date}.",
   "{n} extension(s) in the catalog.": "{n} extensión(es) en el catálogo.",
-  "Extensions": "Extensiones",
+  "Extension manager": "Administrador de extensiones",
   "Topography": "Topografía",
   "Civil": "Civil",
   "Architecture": "Arquitectura",

@@ -45,6 +45,7 @@ def apply() -> None:
     _patch_outside_text_placement()
     _patch_two_line_angular_sector()
     _patch_three_point_angular_sector()
+    _patch_angular_extension_from_vertex()
     _patch_arc_length_symbol_text()
     _patch_dms_angular_text()
     _patch_linetype_dots()
@@ -528,6 +529,39 @@ def _patch_two_line_angular_sector() -> None:
     get_ext1_dir._ingecad_patch = True
     AngularDimension.get_ext1_dir = get_ext1_dir
     AngularDimension.get_ext2_dir = get_ext2_dir
+
+
+def _patch_angular_extension_from_vertex() -> None:
+    """An angular extension line that starts at the vertex starts there.
+
+    When a measured line lies beyond the vertex, DIMANGULAR puts its leg a
+    hair from the vertex (core.actions.angular_from_lines) so that the
+    extension line runs from the vertex to past the arc; DIMEXO's gap would
+    leave it short of the point the angle is measured from.
+    """
+    from ezdxf.render.dim_curved import _CurvedDimensionLine
+
+    original = _CurvedDimensionLine._add_ext_line
+    if getattr(original, "_ingecad_patch", False):
+        return
+
+    def _add_ext_line(self, start, direction, dxfattribs) -> None:
+        center = self.center_of_arc
+        radius = abs(self.dim_line_radius)
+        if radius > 0.0 and (start - center).magnitude <= 1e-5 * radius \
+                and not self.extension_lines.has_fixed_length:
+            end = center + direction * (radius
+                                        + self.extension_lines.extension_above)
+            self.add_line(center, end, dxfattribs=dxfattribs)
+            return
+        if radius > 0.0 and abs((start - center).magnitude - radius) \
+                <= 1e-9 * max(1.0, radius) \
+                and not self.extension_lines.has_fixed_length:
+            return          # the line reaches the arc: no extension line
+        original(self, start, direction, dxfattribs)
+
+    _add_ext_line._ingecad_patch = True
+    _CurvedDimensionLine._add_ext_line = _add_ext_line
 
 
 def _patch_three_point_angular_sector() -> None:

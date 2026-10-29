@@ -2491,6 +2491,12 @@ def line_intersection(l1, l2):
     return (x1 + t * d1[0], y1 + t * d1[1])
 
 
+#: Where an angular dimension's leg sits, as a fraction of its arc radius,
+#: when its extension line starts at the vertex: ezdxf needs a direction,
+#: and the renderer recognises it and starts the line at the vertex itself.
+VERTEX_EXTENSION = 1e-6
+
+
 def angular_from_lines(l1, l2, region):
     """(vertex, p1, p2) for DIMANGULAR between two lines, or None if
     parallel. Of the four regions the two lines form, the one containing
@@ -2511,9 +2517,18 @@ def angular_from_lines(l1, l2, region):
 
     def defpoint(angle, line):
         ux, uy = math.cos(angle), math.sin(angle)
-        reach = max((p[0] - vertex[0]) * ux + (p[1] - vertex[1]) * uy
-                    for p in line)
-        at = min(radius, reach) if reach > 1e-9 else radius
+        along = [(p[0] - vertex[0]) * ux + (p[1] - vertex[1]) * uy
+                 for p in line]
+        reach, near = max(along), min(along)
+        if reach <= 1e-9 * radius:
+            # the line lies beyond the vertex: the extension starts AT the
+            # vertex (Rafael's eighth review, min 21: "tiene que venir justo
+            # hasta el punto de origen del ángulo"); it had none at all
+            at = VERTEX_EXTENSION * radius
+        elif near > radius:
+            at = near           # the line starts past the arc: back to it
+        else:
+            at = min(radius, reach)
         return (vertex[0] + at * ux, vertex[1] + at * uy)
 
     for a in (ang1, ang1 + math.pi):

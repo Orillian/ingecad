@@ -3834,6 +3834,10 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         tabs = QTabWidget(self)
         tabs.setObjectName("sidebar_tabs")
         tabs.setTabPosition(QTabWidget.South)   # tabs at the bottom (IngeTrazo)
+        # whole names and scroll arrows when they do not fit, as IngeTrazo's
+        # trays: a fifth tab elided every name to "La…", "Pr…"
+        tabs.setElideMode(Qt.ElideNone)
+        tabs.setUsesScrollButtons(True)
         tabs.addTab(self._layers_panel, tr("Layers"))
         tabs.addTab(self._properties_panel, tr("Properties"))
         tabs.addTab(self._styles_panel, tr("Palette"))

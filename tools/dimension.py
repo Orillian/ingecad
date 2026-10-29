@@ -23,16 +23,18 @@ from tools.base import Point, Tool
 _LAST_DIM: list = [None]
 
 
-def report_dimension(ctx, cmd) -> None:
-    """What AutoCAD says after placing a linear dimension, recorded side by
-    side: "Non-associative dimension created." when no point was tied to
-    an object, then "Dimension text = 100"."""
+def report_dimension(ctx, cmd, association: bool = True) -> None:
+    """What the classic CAD says after placing a dimension, recorded side
+    by side: "Non-associative dimension created." when no point was tied
+    to an object, then "Dimension text = 100". A radius, diameter or angle
+    picks its object and a continued dimension follows its base: those
+    only say the text (``association=False``)."""
     dim = getattr(cmd, "dim", None)
     if dim is None:
         return
     from core.dim_commands import measurement_text
 
-    if not getattr(cmd, "associate", None):
+    if association and not getattr(cmd, "associate", None):
         ctx.echo(tr("Non-associative dimension created."))
     try:
         text = measurement_text(dim, dim.get_measurement())
@@ -558,6 +560,7 @@ class _CurvedDim(_DimTextMixin, Tool):
             cmd.associate = {2: dimassoc.Reference(dimassoc.OSNAP["CEN"],
                                                    [self._ent.dxf.handle])}
             self.ctx.execute(cmd)
+            report_dimension(self.ctx, cmd, association=False)
             self.ctx.finish()
 
     def preview_segments(self, cursor: Point):
@@ -741,6 +744,7 @@ class DimAngularTool(_DimTextMixin, Tool):
                 self.ctx.echo(tr("Lines are parallel."))
                 return
             self.ctx.execute(cmd)
+            report_dimension(self.ctx, cmd, association=False)
             self.ctx.finish()
 
     def _command_at(self, point: Point):
@@ -1129,7 +1133,7 @@ class _ChainDim(Tool):
         self._stack.append((self._base, self._prev_location))
         self.ctx.execute(cmd)
         set_last_dimension(cmd.dim)
-        report_dimension(self.ctx, cmd)
+        report_dimension(self.ctx, cmd, association=False)
         if self.BASELINE:
             self._prev_location = location
         else:

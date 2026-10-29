@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 
 from core import actions, editmath, modify, ocs, polyoffset
+from core.coords import is_direct_distance
 from core.i18n import tr
 from tools.base import Point, Tool
 
@@ -510,6 +511,14 @@ class OffsetTool(Tool):
                 return True
             if token in ("M", "MULTIPLE") and self._phase == "side":
                 return True     # already the behaviour: the side prompt loops
+            if self._phase == "side" and self._through \
+                    and is_direct_distance(text):
+                # AutoCAD 2026 (group D) refuses a bare number here: the
+                # through point has no base for a direct distance. IngeCAD
+                # took it from LASTPOINT and put the copy somewhere else.
+                self.ctx.echo(tr("Point or option keyword required."))
+                self._ask_side()
+                return True
         return False
 
     def on_enter(self) -> None:

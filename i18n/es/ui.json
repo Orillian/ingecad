@@ -1740,6 +1740,7 @@
   "ZOOM Window is not available transparently.": "ZOOM Ventana no está disponible de forma transparente.",
   "Specify corner of window, enter a scale factor (nX or nXP), or [All/Center/Extents/Previous/Scale/Window] <Extents>:": "Precise una esquina de ventana, indique un factor de escala (nX o nXP) o [Todo(A)/Centro(C)/Extensión(E)/Previo(P)/Escala(S)/Ventana(W)] <Extensión>:",
   "Enter a scale factor (nX or nXP):": "Indique un factor de escala (nX o nXP):",
+  "Point or option keyword required.": "Se requiere un punto o una palabra clave de opción.",
   "Specify center point:": "Precise el punto central:",
   "Enter magnification or height <{height}>:": "Indique ampliación o altura <{height}>:",
   "ZOOM [Extents/Window/Previous] or scale nXP:": "ZOOM [Extensión(E)/Ventana(W)/Previo(P)] o escala nXP:",

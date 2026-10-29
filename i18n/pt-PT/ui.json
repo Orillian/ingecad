@@ -1787,7 +1787,7 @@
   "DWG (*.dwg)": "DWG (*.dwg)",
   "DXF (*.dxf)": "DXF (*.dxf)",
   "DWG support needs LibreDWG's converter (dwg2dxf), and it was not found.": "O suporte de DWG precisa do conversor do LibreDWG (dwg2dxf) e não foi encontrado.",
-  "Plugins...": "Extensões...",
+  "Manage extensions...": "Gerir extensões...",
   "Plugins": "Extensões",
   "A plugin adds a menu of its own. Turn it off and everything it added goes away.": "Uma extensão adiciona um menu próprio. Ao desligá-la desaparece tudo o que ela acrescentou.",
   "Version {v}": "Versão {v}",

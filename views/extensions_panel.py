@@ -10,8 +10,8 @@ whether someone reviewed that exact version, and carries the buttons that
 apply: Install, Update, Enable/Disable, Uninstall. Turning one on or off
 takes effect at once (core/plugins.py); installing one turns it on.
 
-Managers live in the sidebar, not in modal dialogs (Tools > Plugins... and
-PLUGINS open this tab). The network -- the catalog, a download -- runs on
+It fills a window of its own, not modal, as IngeTrazo's (Tools > Manage
+extensions... and PLUGINS open it). The network -- the catalog, a download -- runs on
 one worker thread at a time; without network the installed and included
 plugins are still listed and managed.
 """

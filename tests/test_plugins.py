@@ -284,7 +284,7 @@ def test_the_plugins_command_and_menu_entry_exist(qapp):
     win = _window(qapp)
     try:
         assert "PLUGINS" in win.dispatcher._commands
-        assert "Plugins..." in _menu_labels(win, "Tools")
+        assert "Manage extensions..." in _menu_labels(win, "Tools")
     finally:
         win.close()
 

@@ -1737,7 +1737,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         item(tools_menu, tr("Quick Select..."), self._cmd_qselect)
         item(tools_menu, tr("QuickCalc"), self._cmd_quickcalc)
         item(tools_menu, tr("Group..."), self._cmd_group)
-        item(tools_menu, tr("Plugins..."), self._cmd_plugins)
+        item(tools_menu, tr("Manage extensions..."), self._cmd_plugins)
         item(tools_menu, tr("Load Application..."), self._cmd_appload)
         item(tools_menu, tr("Run Script..."), self._cmd_script)
         # Tools > New UCS, as the classic menu has it (#91); each entry is
@@ -1927,7 +1927,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self._script_runner = None
 
     def _cmd_plugins(self, *args) -> None:
-        """PLUGINS (Tools > Plugins...): the extension manager, a window of
+        """PLUGINS (Tools > Manage extensions...): the extension manager, a window of
         its own beside the drawing, as IngeTrazo's. The catalog is asked
         for the first time it opens -- never at start-up."""
         panel = getattr(self, "_extensions_panel", None)
@@ -3836,7 +3836,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         # drawing stays usable while a plugin installs)
         window = QDialog(self)
         window.setObjectName("extensions_window")
-        window.setWindowTitle(tr("Extension manager") + " — IngeCAD")
+        window.setWindowTitle(tr("Manage extensions") + " — IngeCAD")
         window.resize(760, 720)
         self._extensions_panel = ExtensionsPanel(self, window)
         QVBoxLayout(window).addWidget(self._extensions_panel)

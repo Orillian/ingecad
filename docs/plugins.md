@@ -12,7 +12,7 @@ default. A plugin's **toolbar is off by default** -- the menu is what a
 plugin adds; the user switches the toolbar on in the **extension manager**
 ("Show this plugin's toolbar"), and the choice is
 remembered. A user's own live in `~/.config/IngeCAD/plugins/<id>/`, off
-until enabled in the same window (**Tools ▸ Plugins…**, command `PLUGINS`).
+until enabled in the same window (**Tools ▸ Manage extensions…**, command `PLUGINS`).
 
 ## The extension center
 

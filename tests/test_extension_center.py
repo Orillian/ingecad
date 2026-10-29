@@ -198,9 +198,9 @@ def test_the_tab_lists_the_catalog_and_what_is_included(qapp, user_dir, server):
         assert "1 extension(s)" in panel.status.text()
         assert "same access as IngeCAD" in panel.findChild(
             type(panel.status), "ext_warning").text()
-        # Tools > Plugins... is the same door
+        # Tools > Manage extensions... is the same door
         win._sidebar_tabs.setCurrentIndex(0)
-        assert "Plugins..." in [a.text() for a in _tools_menu(win)]
+        assert "Manage extensions..." in [a.text() for a in _tools_menu(win)]
     finally:
         win.close()
 

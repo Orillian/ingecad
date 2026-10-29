@@ -45,7 +45,7 @@ What works today:
   the British National Grid is `EPSG:27700` — through PROJ), read or type
   latitude and longitude, ground elevations
   from a global DEM, the satellite image under the plan, and Google Earth
-  both ways by KML/KMZ. Plugins are managed in Tools ▸ Plugins; the
+  both ways by KML/KMZ. Plugins are managed in Tools ▸ Manage extensions; the
   contract for writing one is in `docs/plugins.md`.
 
   ![Topography: the construction chart and contours](docs/images/topografia.jpeg)

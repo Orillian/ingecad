@@ -1811,7 +1811,7 @@
   "DWG (*.dwg)": "DWG (*.dwg)",
   "DXF (*.dxf)": "DXF (*.dxf)",
   "DWG support needs LibreDWG's converter (dwg2dxf), and it was not found.": "DWG를 지원하려면 LibreDWG의 변환기(dwg2dxf)가 필요한데 찾지 못했습니다.",
-  "Plugins...": "플러그인...",
+  "Manage extensions...": "확장 관리...",
   "Plugins": "플러그인",
   "A plugin adds a menu of its own. Turn it off and everything it added goes away.": "플러그인은 자체 메뉴를 추가합니다. 끄면 플러그인이 추가한 모든 것이 사라집니다.",
   "Version {v}": "버전 {v}",

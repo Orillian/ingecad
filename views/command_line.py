@@ -99,15 +99,7 @@ class _PromptEdit(QLineEdit):
             key == Qt.Key_Space and not self.text().endswith(" ")
             and self._space_executes()
         ):
-            text = self._typed_text()
-            stripped = text.strip()
-            # adjacent duplicates collapse, like AutoCAD's recall list
-            if stripped and (not self._history
-                             or self._history[-1] != stripped):
-                self._history.append(stripped)
-            self._cursor = len(self._history)
-            self.clear()
-            self.submitted.emit(text)
+            self.execute_typed()
             return
         if key == Qt.Key_Escape:
             self.clear()
@@ -123,6 +115,18 @@ class _PromptEdit(QLineEdit):
                          if self._cursor < len(self._history) else "")
             return
         super().keyPressEvent(event)
+
+    def execute_typed(self) -> None:
+        """Enter: run what is typed (nothing typed repeats, as ever)."""
+        text = self._typed_text()
+        stripped = text.strip()
+        # adjacent duplicates collapse, like AutoCAD's recall list
+        if stripped and (not self._history
+                         or self._history[-1] != stripped):
+            self._history.append(stripped)
+        self._cursor = len(self._history)
+        self.clear()
+        self.submitted.emit(text)
 
     def _space_executes(self) -> bool:
         # Space acts as Enter — except while the active tool takes literal

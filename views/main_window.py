@@ -537,6 +537,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
     def on_canvas_right_click(self, global_pos) -> None:
         """Right-click on the canvas: Enter while a command runs, the
         shortcut menu when idle (classic AutoCAD defaults)."""
+        if self._enter_typed():
+            return
         if self.tools.active() or self.tools._selecting_for is not None:
             if not self.tools.on_text(""):
                 self.dispatcher.submit("")
@@ -2282,8 +2284,21 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self.command_line.echo(tr("Coordinate display: {state}",
                                   state=tr("on") if self._coords_on else tr("off")))
 
+    def _enter_typed(self) -> bool:
+        """With something typed at the command line, the Enter that a
+        right click or Ctrl+J stands for runs it -- "DS" then a right click
+        ran the last command instead of DIST (#110). False with nothing
+        typed: the caller's Enter repeats or accepts, as before."""
+        edit = self.command_line.input
+        if not edit._typed_text().strip():
+            return False
+        edit.execute_typed()
+        return True
+
     def _repeat_last_command(self) -> None:
         """Ctrl+J / Ctrl+M: exactly what Enter does at the prompt."""
+        if self._enter_typed():
+            return
         if self.tools.active() or self.tools._selecting_for is not None:
             if not self.tools.on_text(""):
                 self.dispatcher.submit("")

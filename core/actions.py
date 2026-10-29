@@ -249,28 +249,37 @@ class AddEntityCommand(Command):
         self.entity = None
 
     def do(self, document) -> None:
-        self.entity = self._factory(self.space(document))
-        dress_new_entity(document, self.entity, self.layer)
+        entity = self.entity
+        if entity is not None and entity.is_alive \
+                and entity.dxf.get("owner") is None:
+            # a redo: the SAME entity comes back, handle and all, so a later
+            # step that changed it (an APPLOAD script, a turn of the AI that
+            # drew a line and then moved it) still finds it
+            self.space(document).add_entity(entity)
+        else:
+            entity = self.entity = self._factory(self.space(document))
+            dress_new_entity(document, entity, self.layer)
         # A text in an annotative style is born annotative at the current
         # annotation scale: its typed height was a paper height (A2).
-        if self.entity.dxftype() in ("TEXT", "MTEXT"):
+        if entity.dxftype() in ("TEXT", "MTEXT"):
             from core import annotative
 
-            annotative.annotate_new_entity(document, self.entity)
+            annotative.annotate_new_entity(document, entity)
         document.dirty = True
 
     def undo(self, document) -> None:
-        if self.entity is not None:
-            # Handles destroyed here are recorded so the UI can hide the
+        if self.entity is not None and self.entity.is_alive:
+            # Handles taken away here are recorded so the UI can hide the
             # base-scene copies surgically instead of paying a full regen.
             self.removed_handles = [self.entity.dxf.handle]
             from core import annotative
 
             # its scale representations go with it (ezdxf's delete would
-            # leave them orphaned in OBJECTS)
+            # leave them orphaned in OBJECTS); a redo makes them again
             annotative.remove_representations(self.entity)
-            self.space(document).delete_entity(self.entity)
-            self.entity = None
+            # unlinked, not destroyed -- as ERASE keeps what it takes -- so
+            # the redo can give back the same entity
+            self.space(document).unlink_entity(self.entity)
         document.dirty = True
 
 

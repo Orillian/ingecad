@@ -21,7 +21,6 @@ import traceback
 from pathlib import Path
 from typing import Callable, Optional
 
-from core.commands import CompositeCommand
 
 
 def script_namespace(host) -> dict:
@@ -73,13 +72,7 @@ def run_python(path: Path | str, host) -> tuple[int, Optional[str]]:
         exec(code, script_namespace(host))          # noqa: S102 - the user's own file
     except Exception:                                # noqa: BLE001 - reported, not raised
         error = traceback.format_exc().strip().splitlines()[-1]
-    added = history._undo[before:]
-    if len(added) > 1:
-        del history._undo[before:]
-        composite = CompositeCommand(path.name, added)
-        composite._space = None                      # already done; do() is never re-run here
-        history.record(composite)
-    return len(added), error
+    return history.fold(before, path.name), error
 
 
 class ScriptRunner:

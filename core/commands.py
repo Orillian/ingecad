@@ -159,6 +159,19 @@ class History:
         if getattr(command, "_touched_blocks", False):
             document.blocks_revision = getattr(document, "blocks_revision", 0) + 1
 
+    def fold(self, since: int, name: str) -> int:
+        """Fold everything recorded after undo-stack depth ``since`` into
+        ONE step called ``name``: an APPLOAD script, a turn of the AI
+        assistant -- what it did goes away with a single U. Returns how
+        many entries there were."""
+        added = self._undo[since:]
+        if len(added) > 1:
+            del self._undo[since:]
+            composite = CompositeCommand(name, added)
+            composite._space = None          # already done; do() is not re-run here
+            self.record(composite)
+        return len(added)
+
     @property
     def can_undo(self) -> bool:
         return bool(self._undo)

@@ -2117,5 +2117,8 @@
   "Delta": "Delta",
   "Squared": "Al cuadrado",
   "Cubed": "Al cubo",
-  "Apply changes to existing references": "Aplicar cambios a referencias existentes"
+  "Apply changes to existing references": "Aplicar cambios a referencias existentes",
+  "AI: {tool}": "IA: {tool}",
+  "The assistant wants to erase {count} objects.": "El asistente quiere borrar {count} objetos.",
+  "The assistant wants to write over {path}.": "El asistente quiere sobrescribir {path}."
 }

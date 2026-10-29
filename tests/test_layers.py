@@ -71,11 +71,14 @@ def test_new_entities_use_current_layer():
     h.execute(actions.add_line((0, 0), (10, 0)))
     line = doc.modelspace().query("LINE")[0]
     assert line.dxf.layer == "MUROS"
-    # after undo/redo the entity keeps landing on the current layer
+    # REDO reverses the undo exactly (AutoCAD): the same line comes back,
+    # on its own layer, whatever is current by then
+    handle = line.dxf.handle
     h.undo()
     L.set_current_layer(doc, "0")
     h.redo()
-    assert doc.modelspace().query("LINE")[0].dxf.layer == "0"
+    (back,) = doc.modelspace().query("LINE")
+    assert back.dxf.handle == handle and back.dxf.layer == "MUROS"
 
 
 def test_layer_linetype_and_lineweight():

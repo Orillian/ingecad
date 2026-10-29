@@ -270,6 +270,82 @@ def points_of_intersection(alignment: Alignment) -> list[PI]:
     return out
 
 
+class TangentOverlap(ValueError):
+    """Two curves need more tangent than the straight between their PIs."""
+
+    def __init__(self, first: int, second: int, needed: float, available: float) -> None:
+        where = f"PI-{first}" if first == second else f"PI-{first} and PI-{second}"
+        super().__init__(f"{where}: T = {needed:.3f} m > {available:.3f} m")
+        self.first, self.second = first, second
+        self.needed, self.available = needed, available
+
+
+def deflections(points) -> list[float]:
+    """Signed deflection at each interior vertex of a chain of tangents."""
+    out = []
+    for a, b, c in zip(points, points[1:], points[2:]):
+        a_in = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        a_out = math.degrees(math.atan2(c[1] - b[1], c[0] - b[0]))
+        out.append(_deflection(a_in, a_out))
+    return out
+
+
+def fit_curves(points, radii) -> list[Vertex]:
+    """The axis through a chain of tangents with a simple circular curve of
+    radius ``radii[i]`` at each interior vertex (PI), as (x, y, bulge)
+    vertices. A PI where the tangents are aligned, or whose radius is 0,
+    keeps its corner. Raises :class:`TangentOverlap` when two curves would
+    need more than the tangent between them, and ValueError on a PI that
+    turns back on itself."""
+    pts = [(float(p[0]), float(p[1])) for p in points]
+    if len(pts) < 3:
+        raise ValueError("a chain of tangents needs at least three vertices")
+    turns = deflections(pts)
+    if len(radii) != len(turns):
+        raise ValueError(f"{len(radii)} radii for {len(turns)} PIs")
+    tangents = []
+    for i, (turn, r) in enumerate(zip(turns, radii)):
+        if abs(abs(turn) - 180.0) < 1e-7:
+            raise ValueError(f"PI-{i + 1} turns back on itself")
+        if r < 0:
+            raise ValueError(f"PI-{i + 1}: the radius must be positive")
+        tangents.append(0.0 if abs(turn) < 1e-7 or r == 0
+                        else CurveElements(abs(turn), r).tangent)
+    for j in range(len(pts) - 1):
+        length = math.hypot(pts[j + 1][0] - pts[j][0], pts[j + 1][1] - pts[j][1])
+        before = tangents[j - 1] if j >= 1 else 0.0          # at vertex j
+        after = tangents[j] if j < len(tangents) else 0.0     # at vertex j+1
+        if before + after > length + 1e-9:
+            if j == 0 or j == len(pts) - 2:
+                # a curve longer than the first or last tangent: the axis
+                # would start or end inside the curve
+                which = j + 1 if j == 0 else j
+                raise TangentOverlap(which, which, before + after, length)
+            raise TangentOverlap(j, j + 1, before + after, length)
+    out: list[Vertex] = []
+
+    def push(x: float, y: float, bulge: float) -> None:
+        if out and math.hypot(out[-1][0] - x, out[-1][1] - y) < 1e-9:
+            out[-1] = (out[-1][0], out[-1][1], bulge)      # PT meets the next PC
+        else:
+            out.append((x, y, bulge))
+
+    push(pts[0][0], pts[0][1], 0.0)
+    for i, (turn, t) in enumerate(zip(turns, tangents)):
+        a, b, c = pts[i], pts[i + 1], pts[i + 2]
+        if t <= 0.0:
+            push(b[0], b[1], 0.0)
+            continue
+        lin = math.hypot(b[0] - a[0], b[1] - a[1])
+        lout = math.hypot(c[0] - b[0], c[1] - b[1])
+        pc = (b[0] - (b[0] - a[0]) / lin * t, b[1] - (b[1] - a[1]) / lin * t)
+        pt = (b[0] + (c[0] - b[0]) / lout * t, b[1] + (c[1] - b[1]) / lout * t)
+        push(pc[0], pc[1], math.copysign(math.tan(math.radians(abs(turn)) / 4.0), turn))
+        push(pt[0], pt[1], 0.0)
+    push(pts[-1][0], pts[-1][1], 0.0)
+    return out
+
+
 def parse_station(text: str) -> float:
     """``1+250.50``, ``1+250,5`` or plain metres ``1250.5``."""
     raw = text.strip().replace(",", ".")

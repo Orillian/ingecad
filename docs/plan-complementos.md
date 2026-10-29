@@ -439,6 +439,14 @@ entra pluvial, es con intensidad-duración de SENAMHI y sin marca.
 Se apoya en Topografía (eje, perfil, secciones, volúmenes ya existen ahí).
 Norma **DG-2018** del MTC, no SCT.
 
+> **Estado (2026-10-29): C1 y C2 hechas** (`ROADAXIS`, `STATIONING`,
+> `RESTATION`, `AXISREVERSE`, `AXISTABLE`, `HCURVES`, `CURVETABLE`), con
+> XDATA bajo el APPID propio `INGECAD_CARRETERAS`. Los formatos de ángulo,
+> rumbo y progresiva que comparten los dos complementos viven en
+> `core/surveying.py`. Falta el control de radio mínimo por velocidad de
+> diseño: la tabla de radios mínimos de la DG-2018 no está en
+> `docs/reference/` y no se inventa; entra cuando esté la tabla oficial.
+
 - **C1 — Eje y estacado:** progresivas, cuadro del eje, invertir
   cadenamiento, separar eje.
 - **C2 — Curvas horizontales simples:** PI, radio, tangentes; cuadro de

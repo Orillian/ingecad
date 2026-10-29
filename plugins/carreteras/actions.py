@@ -6,7 +6,8 @@ document, and everything it draws is a plain DXF entity.
 An axis (eje) is an open LWPOLYLINE of tangents and arcs on ``CAR-EJE``
 whose XDATA, under the plugin's own APPID ``INGECAD_CARRETERAS``, holds its
 start station, its direction and the stationing it was last drawn with.
-What the plugin draws for an axis -- station ticks and their labels -- carries the axis handle in the same APPID, so drawing
+What the plugin draws for an axis -- station ticks, their labels, the PI,
+PC and PT marks -- carries the axis handle in the same APPID, so drawing
 the stationing again replaces the old one in one undo step. The tables are
 plain lines and text (``core.tables``), a snapshot like Topography's chart.
 """
@@ -36,11 +37,13 @@ LAYERS = {
     "axis": ("CAR-EJE", 1),
     "ticks": ("CAR-ESTACAS", 7),
     "stations": ("CAR-PROGRESIVAS", 3),
+    "curves": ("CAR-CURVAS", 4),
     "tables": ("CAR-CUADROS", 7),
 }
 
 #: annotation kinds, each regenerated with the axis
 STATIONS = "stations"
+CURVES = "curves"
 
 
 @dataclass(frozen=True)
@@ -248,20 +251,56 @@ def stationing_commands(alignment: geometry.Alignment, params: AxisParams, link)
     return out
 
 
+def curve_mark_commands(alignment: geometry.Alignment, params: AxisParams, link) -> list[Command]:
+    """At each PI its name; at each curve's PC and PT a radial mark with
+    its station, written on the outside of the curve."""
+    out: list[Command] = []
+    layer = LAYERS["curves"][0]
+    h = params.height
+    for pi in geometry.points_of_intersection(alignment):
+        px, py = pi.point
+        if pi.curve is None:
+            out.append(_text(f"PI-{pi.number}", (px, py + 1.5 * h), h, layer, CURVES, link))
+            continue
+        # the PI label beyond the PI, away from the curve
+        (mx, my), _ = alignment.at_station((pi.pc_station + pi.pt_station) / 2.0)
+        dx, dy = px - mx, py - my
+        d = math.hypot(dx, dy) or 1.0
+        out.append(_text(f"PI-{pi.number}", (px + dx / d * 1.5 * h, py + dy / d * 1.5 * h),
+                         h, layer, CURVES, link))
+        for name, point, station in (("PC", pi.pc, pi.pc_station), ("PT", pi.pt, pi.pt_station)):
+            _, angle = alignment.at_station(station)
+            rad = math.radians(angle)
+            nx, ny = -math.sin(rad), math.cos(rad)
+            # the outside of a left turn is the right
+            side = -1.0 if pi.left else 1.0
+            ox, oy = nx * side, ny * side
+            a = point
+            b = (point[0] + ox * params.tick, point[1] + oy * params.tick)
+            out.append(_line(a, b, layer, CURVES, link))
+            rotation, align = _along(math.degrees(math.atan2(oy, ox)))
+            out.append(_text(f"{name} {format_station(station)}",
+                             (b[0] + ox * 0.5 * h, b[1] + oy * 0.5 * h), h, layer,
+                             CURVES, link, rotation, align))
+    return out
+
+
 def _drawing_commands(alignment, params, link, kinds) -> list[Command]:
     out: list[Command] = []
     if STATIONS in kinds:
         out.extend(stationing_commands(alignment, params, link))
+    if CURVES in kinds:
+        out.extend(curve_mark_commands(alignment, params, link))
     return out
 
 
 def define_axis(document, entity, params: AxisParams) -> CompositeCommand:
     """ROADAXIS: the polyline becomes an axis with ``params``; whatever was
-    already drawn for it is redrawn to match."""
+    already drawn for it (stations, curve marks) is redrawn to match."""
     alignment = alignment_of(entity, params)             # refuses a bad polyline now
     existing = annotations_of(document, entity)
     kinds = {annotation_kind(e)[0] for e in existing}
-    commands = layer_commands(document, ("axis", "ticks", "stations"))
+    commands = layer_commands(document, ("axis", "ticks", "stations", "curves"))
     commands.append(SetAxisCommand(entity, params))
     if existing:
         commands.append(EraseCommand(existing))
@@ -277,7 +316,7 @@ def draw_stationing(document, entity, params: AxisParams | None = None) -> Compo
     alignment = alignment_of(entity, params)
     existing = annotations_of(document, entity)
     kinds = {annotation_kind(e)[0] for e in existing} | {STATIONS}
-    commands = layer_commands(document, ("axis", "ticks", "stations"))
+    commands = layer_commands(document, ("axis", "ticks", "stations", "curves"))
     commands.append(SetAxisCommand(entity, params))
     if existing:
         commands.append(EraseCommand(existing))
@@ -286,9 +325,9 @@ def draw_stationing(document, entity, params: AxisParams | None = None) -> Compo
 
 
 def regenerate(document, axes) -> CompositeCommand:
-    """RESTATION: redraw what each axis has drawn (its stationing)
-    from the axis as it is now -- after a grip edit, say."""
-    commands: list[Command] = layer_commands(document, ("ticks", "stations"))
+    """RESTATION: redraw what each axis has drawn (its stationing, its curve
+    marks) from the axis as it is now -- after a grip edit, say."""
+    commands: list[Command] = layer_commands(document, ("ticks", "stations", "curves"))
     for entity in axes:
         params = axis_params(entity)
         if params is None:
@@ -344,11 +383,45 @@ def axis_table(document, entity, insert, text_height: float = 2.0) -> CompositeC
     h = text_height
     headers = ["PI", tr("STATION"), tr("EAST"), tr("NORTH"), tr("BEARING"),
                tr("AZIMUTH"), tr("DISTANCE")]
-    widths = [w * h for w in (7.0, 8.0, 10.0, 11.0, 12.0, 10.0, 8.0)]
+    widths = [w * h for w in (7.0, 9.0, 10.0, 11.0, 12.0, 10.0, 10.0)]
     table = tables.insert_table(insert, cols=7, col_width=10.0 * h, data_rows=len(rows),
                                 row_height=2.0 * h, text_height=h, title=tr("AXIS TABLE"),
                                 headers=headers, data=rows, col_widths=widths)
     return _on_table_layer(document, table, "axis table")
+
+
+def curve_table_rows(alignment: geometry.Alignment) -> list[list[str]]:
+    rows = []
+    n = 0
+    for pi in geometry.points_of_intersection(alignment):
+        c = pi.curve
+        if c is None:
+            continue
+        n += 1
+        rows.append([f"C-{n}", f"PI-{pi.number}", format_dms(c.delta),
+                     tr("Left") if pi.left else tr("Right"),
+                     _f(c.radius, 2), _f(c.tangent), _f(c.length), _f(c.external),
+                     _f(c.middle_ordinate), _f(c.chord),
+                     format_station(pi.pc_station), format_station(pi.pt_station)])
+    return rows
+
+
+def curve_table(document, entity, insert, text_height: float = 2.0) -> CompositeCommand:
+    """CURVETABLE: one row per curve of the axis -- Δ, direction, R, T, Lc,
+    E, M, C and the PC and PT stations."""
+    alignment = alignment_of(entity)
+    rows = curve_table_rows(alignment)
+    if not rows:
+        raise ValueError(tr("The axis has no curves."))
+    h = text_height
+    headers = [tr("CURVE"), "PI", "Δ", tr("DIRECTION"), "R", "T", "Lc", "E", "M", "C",
+               "PC", "PT"]
+    widths = [w * h for w in (7.0, 6.0, 9.0, 10.0, 7.0, 7.0, 7.0, 6.0, 6.0, 7.0, 9.0, 9.0)]
+    table = tables.insert_table(insert, cols=12, col_width=7.0 * h, data_rows=len(rows),
+                                row_height=2.0 * h, text_height=h,
+                                title=tr("HORIZONTAL CURVE ELEMENTS"),
+                                headers=headers, data=rows, col_widths=widths)
+    return _on_table_layer(document, table, "curve table")
 
 
 def _on_table_layer(document, table: CompositeCommand, name: str) -> CompositeCommand:
@@ -357,3 +430,43 @@ def _on_table_layer(document, table: CompositeCommand, name: str) -> CompositeCo
         command.layer = LAYERS["tables"][0]
     commands.extend(table.commands)
     return CompositeCommand(name, commands)
+
+
+# -- C2: horizontal curves --------------------------------------------------------------
+
+def tangent_points(entity) -> list:
+    """The vertices of a chain of tangents (an open polyline without arcs)."""
+    verts = polyline_vertices(entity)
+    if any(abs(v[2]) > 1e-12 for v in verts):
+        raise ValueError(tr("The polyline already has arcs: draw the tangents only."))
+    pts = []
+    for x, y, _b in verts:
+        if not pts or math.hypot(x - pts[-1][0], y - pts[-1][1]) > geometry.EPS:
+            pts.append((x, y))
+    if len(pts) < 3:
+        raise ValueError(tr("The polyline needs at least two tangents."))
+    return pts
+
+
+def fit_axis(document, tangents_entity, radii, params: AxisParams | None = None) -> CompositeCommand:
+    """HCURVES: a new axis on ``CAR-EJE`` through the tangents with a simple
+    curve of ``radii[i]`` at each PI, and its PI, PC and PT marks. The chain
+    of tangents stays as it was. Raises geometry.TangentOverlap."""
+    params = params or AxisParams()
+    vertices = geometry.fit_curves(tangent_points(tangents_entity), radii)
+    alignment = geometry.Alignment(vertices, params.start)
+    xdata = params.xdata()
+
+    def make(msp):
+        ensure_appid(msp.doc, APPID)
+        entity = msp.add_lwpolyline(vertices, format="xyb")
+        entity.set_xdata(APPID, xdata)
+        return entity
+
+    commands = layer_commands(document, ("axis", "ticks", "stations", "curves"))
+    axis_cmd = AddEntityCommand("CAR-AXIS", make, layer=LAYERS["axis"][0])
+    commands.append(axis_cmd)
+    commands.extend(curve_mark_commands(alignment, params, _link(axis_cmd)))
+    command = CompositeCommand("horizontal curves", commands)
+    command.axis_command = axis_cmd
+    return command

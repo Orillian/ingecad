@@ -125,7 +125,8 @@ def _station(win, entity, *answers, pick=(1050.0, 2000.0)):
 def test_the_plugin_is_bundled_on_with_its_menu_and_no_toolbar(win):
     assert win.plugins.is_active("carreteras")
     assert "Roads" in [a.text() for a in win._menu_bar.actions()]
-    for name in ("ROADAXIS", "STATIONING", "RESTATION", "AXISREVERSE", "AXISTABLE"):
+    for name in ("ROADAXIS", "STATIONING", "RESTATION", "AXISREVERSE", "AXISTABLE",
+                 "HCURVES", "CURVETABLE"):
         assert name in win.dispatcher._commands
     assert win.plugins.has_toolbar("carreteras")
     assert "plugin_carreteras_toolbar" not in [
@@ -138,7 +139,8 @@ def test_turning_roads_off_leaves_no_trace(win):
     try:
         assert "Roads" not in [a.text() for a in win._menu_bar.actions()]
         gone = before - set(win.dispatcher._commands)
-        assert {"ROADAXIS", "STATIONING", "RESTATION", "AXISREVERSE", "AXISTABLE"} <= gone
+        assert {"ROADAXIS", "STATIONING", "RESTATION", "AXISREVERSE", "AXISTABLE",
+                "HCURVES", "CURVETABLE"} <= gone
         assert all(name.startswith(("ROAD", "STATION", "RESTATION", "AXIS", "HCURVE", "CURVE"))
                    for name in gone), gone
     finally:

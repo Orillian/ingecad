@@ -14,5 +14,11 @@
   },
   "AXISTABLE": {
     "name": "CUADROEJE"
+  },
+  "HCURVES": {
+    "name": "CURVASHORIZ"
+  },
+  "CURVETABLE": {
+    "name": "CUADROCURVAS"
   }
 }

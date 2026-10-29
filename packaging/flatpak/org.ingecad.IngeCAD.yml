@@ -33,9 +33,13 @@ finish-args:
   - --filesystem=/run/media
   # Network, since the Terrain plugin (0.6): DEMPOINTS / DEMPROFILE fetch
   # elevation tiles on request, and the coming satellite imagery and KML
-  # need it too. Nothing else in IngeCAD touches the network, and the
-  # metainfo says so.
+  # need it too; since 0.6.9 also the AI assistant, off by default, which
+  # talks to the provider the user chose. Nothing else in IngeCAD touches
+  # the network, and the metainfo says so.
   - --share=network
+  # The AI assistant keeps its API keys in the desktop's keyring (Secret
+  # Service, core/ai/secrets.py); without this it falls back to a 0600 file.
+  - --talk-name=org.freedesktop.secrets
 
 modules:
   # PySide6's Qt links QtNetwork/QtPdf against GSSAPI; the Freedesktop

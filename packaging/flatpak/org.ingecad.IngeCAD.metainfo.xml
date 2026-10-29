@@ -24,14 +24,18 @@
       lleva y que IngeCAD no entiende se conserva intacto al guardar.
     </p>
     <p>
-      The Terrain plugin can fetch ground elevations from a public global
-      DEM (AWS Terrain Tiles) when you ask for them; that is the only use
-      IngeCAD makes of the network.
+      IngeCAD uses the network only when you ask it to: the Terrain plugin
+      fetches ground elevations from a public global DEM (AWS Terrain
+      Tiles), and the optional AI assistant, off until you turn it on,
+      sends your requests to the provider you choose (or to a model running
+      on your own computer).
     </p>
     <p xml:lang="es">
-      El complemento Terreno puede obtener cotas del terreno de un DEM
-      global público (AWS Terrain Tiles) cuando se le pide; es el único uso
-      que IngeCAD hace de la red.
+      IngeCAD usa la red sólo cuando se le pide: el complemento Terreno
+      obtiene cotas de un DEM global público (AWS Terrain Tiles), y el
+      asistente de IA opcional, apagado hasta que usted lo active, envía sus
+      pedidos al proveedor que elija (o a un modelo que corre en su propia
+      computadora).
     </p>
     <p>
       Draw and edit with AutoCAD's muscle memory, blocks with a full Block

@@ -224,6 +224,22 @@ def _self_check() -> int:
         print(f"  {'PROJ':<14}: MISSING  {exc}")
         problems.append("PROJ")
 
+    # The AI assistant and `--mcp` (0.6.9): the frozen build must carry
+    # core.ai -- an MCP client that starts `ingecad --mcp` and gets an
+    # import error sees only a dead server.
+    try:
+        from core.ai.mcp_server import Server, BridgeClient
+
+        listed = Server(BridgeClient("", "")).handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        count = len(listed["result"]["tools"])
+        if not count:
+            raise ValueError("no tools")
+        print(f"  {'AI / MCP':<14}: ok  ({count} tools)")
+    except Exception as exc:  # noqa: BLE001 - report whatever it is
+        print(f"  {'AI / MCP':<14}: MISSING  {exc}")
+        problems.append("AI / MCP")
+
     for label, finder in (("dwg2dxf", find_dwg2dxf), ("dxf2dwg", find_dxf2dwg)):
         tool = finder()
         where = "bundled" if tool and str(tool).startswith(str(root)) else "system PATH"

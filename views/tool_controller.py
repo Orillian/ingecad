@@ -443,6 +443,8 @@ class ToolController(QObject):
         # Stamped commits (big MOVE/COPY/PASTE): id(command) -> record.
         self._stamp_records: dict = {}
         self._pending_stamps: list = []   # record keys awaiting ghost scene
+        #: The menu macro answering the running command's prompts.
+        self.macro = None
         # Per-frame caches keyed on (index.version, selection).
         self._highlight_cache = None
         self._grips_cache = None
@@ -1424,9 +1426,34 @@ class ToolController(QObject):
         dynamic-input tooltip beside the cursor."""
         self.current_prompt = text
         self.window.command_line.echo_prompt(text)
+        if self.macro is not None:
+            self._macro_step()
+
+    #: A menu macro's pause: this prompt is the user's to answer (AutoCAD's
+    #: backslash in ``^C^C_arc \_c``).
+    MACRO_PAUSE = "\\"
+
+    def run_macro(self, answers) -> None:
+        """Answer the running command's prompts in turn, as an AutoCAD menu
+        macro does: one entry per prompt, a keyword typed for the user or
+        MACRO_PAUSE to let the user answer it. The answers go through the
+        command line, so the history reads as if they had been typed."""
+        self.macro = list(answers)
+        self._macro_step()
+
+    def _macro_step(self) -> None:
+        if not self.macro or self.tool is None:
+            self.macro = None
+            return
+        answer = self.macro.pop(0)
+        if not self.macro:
+            self.macro = None
+        if answer != self.MACRO_PAUSE:
+            self.window._on_command_submitted(answer)
 
     def _finish(self) -> None:
         self.tool = None
+        self.macro = None
         self.snap_hit = None
         self.osnap_override = None
         self._modifier = None
@@ -1456,6 +1483,7 @@ class ToolController(QObject):
 
     def cancel(self) -> None:
         self.repeat_name = None          # Esc ends MULTIPLE too
+        self.macro = None
         self.reset_pick_cycle()
         if self._grip_drag is not None and self._grip_drag[0] == _VP_GRIP:
             # Esc mid-drag of a viewport grip: nothing was mutated yet

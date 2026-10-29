@@ -2190,5 +2190,14 @@
   "Korean translation of the interface.": "Traducción al coreano de la interfaz.",
   "The construction lines that ended at the edge of the screen.": "Las líneas auxiliares que terminaban en el borde de la pantalla.",
   "Asked for toolbars that stay hidden.": "Pidió barras de herramientas que se queden ocultas.",
-  "TRIM supports LINE, PLINE, CIRCLE, ARC and ELLIPSE for now.": "TRIM soporta LINE, PLINE, CIRCLE, ARC y ELLIPSE por ahora."
+  "TRIM supports LINE, PLINE, CIRCLE, ARC and ELLIPSE for now.": "TRIM soporta LINE, PLINE, CIRCLE, ARC y ELLIPSE por ahora.",
+  "Start, Center, End": "Inicio, centro, fin",
+  "Start, Center, Angle": "Inicio, centro, ángulo",
+  "Start, Center, Length": "Inicio, centro, longitud",
+  "Start, End, Angle": "Inicio, fin, ángulo",
+  "Start, End, Direction": "Inicio, fin, dirección",
+  "Start, End, Radius": "Inicio, fin, radio",
+  "Center, Start, End": "Centro, inicio, fin",
+  "Center, Start, Angle": "Centro, inicio, ángulo",
+  "Center, Start, Length": "Centro, inicio, longitud"
 }

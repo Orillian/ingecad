@@ -486,6 +486,48 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self.viewport.setFocus()
 
     # -- canvas right-click (classic AutoCAD shortcut menu) ---------------------
+    #: Draw > Arc, AutoCAD's menu: each way is ARC with a macro answering
+    #: its option keywords, a pause (\\) where the user picks a point.
+    #: None separates the groups.
+    ARC_METHODS = (
+        ("3 Points", ()),
+        None,
+        ("Start, Center, End", ("\\", "_C")),
+        ("Start, Center, Angle", ("\\", "_C", "\\", "_A")),
+        ("Start, Center, Length", ("\\", "_C", "\\", "_L")),
+        None,
+        ("Start, End, Angle", ("\\", "_E", "\\", "_A")),
+        ("Start, End, Direction", ("\\", "_E", "\\", "_D")),
+        ("Start, End, Radius", ("\\", "_E", "\\", "_R")),
+        None,
+        ("Center, Start, End", ("_C",)),
+        ("Center, Start, Angle", ("_C", "\\", "\\", "_A")),
+        ("Center, Start, Length", ("_C", "\\", "\\", "_L")),
+        None,
+        ("Continue", ("",)),
+    )
+
+    def _fill_arc_menu(self, menu) -> None:
+        for method in self.ARC_METHODS:
+            if method is None:
+                menu.addSeparator()
+                continue
+            menu.addAction(tr(method[0]),
+                           lambda _=False, m=method[0]: self._arc_by(m))
+
+    def _arc_by(self, label: str) -> None:
+        """Draw > Arc > ...: ARC, its options answered for the way picked.
+        The Draw toolbar's Arc button then draws that way, as the ribbon's
+        Arc drop-down keeps the last one used."""
+        answers = dict(m for m in self.ARC_METHODS if m is not None)[label]
+        self._arc_last = label
+        act = getattr(self, "_arc_action", None)
+        if act is not None:
+            act.setToolTip(f"{tr('Arc')}: {tr(label)} (ARC)")
+        self._invoke_command("ARC")
+        if answers and self.tools.tool is not None:
+            self.tools.run_macro(answers)
+
     def _circle_by(self, option: str) -> None:
         """Draw > Circle > ...: CIRCLE, answered with the option picked.
         Center, Diameter answers at the radius prompt, like AutoCAD's macro."""
@@ -1554,7 +1596,9 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
                               (tr("Tan, Tan, Tan"), "TTT")):
             item(circle_menu, label,
                  lambda _=False, o=option: self._circle_by(o))
-        for label, name in ((tr("Arc"), "ARC"), (tr("Ellipse"), "ELLIPSE"),
+        # AutoCAD classic: Draw > Arc, the eleven ways in their groups
+        self._fill_arc_menu(draw_menu.addMenu(tr("Arc")))
+        for label, name in ((tr("Ellipse"), "ELLIPSE"),
                             (tr("Rectangle"), "RECTANG"), (tr("Polygon"), "POLYGON")):
             cmd_item(draw_menu, label, name)
         # AutoCAD classic: one Draw > Point, a submenu (Rafael's review 6
@@ -3160,6 +3204,24 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         for name, label in draw:
             act = QAction(command_icon(name), label, self)
             act.setToolTip(f"{label} ({name})")
+            if name == "ARC":
+                # the ribbon's Arc drop-down: the arrow lists the eleven
+                # ways, the button draws the last one picked (3 Points first)
+                self._arc_last = "3 Points"
+                self._arc_action = act
+                act.setToolTip(f"{label}: {tr('3 Points')} (ARC)")
+                act.triggered.connect(
+                    lambda _=False: self._arc_by(self._arc_last))
+                self._draw_toolbar.addAction(act)
+                from PySide6.QtWidgets import QMenu, QToolButton
+
+                button = self._draw_toolbar.widgetForAction(act)
+                if isinstance(button, QToolButton):
+                    self._arc_toolbar_menu = QMenu(button)
+                    self._fill_arc_menu(self._arc_toolbar_menu)
+                    button.setMenu(self._arc_toolbar_menu)
+                    button.setPopupMode(QToolButton.MenuButtonPopup)
+                continue
             act.triggered.connect(lambda _=False, n=name: self._invoke_command(n))
             self._draw_toolbar.addAction(act)
         self.addToolBar(Qt.LeftToolBarArea, self._draw_toolbar)

@@ -1304,7 +1304,18 @@ class FilletTool(Tool):
         self._await = None             # "radius", "trim", "polyline"
         self._multiple = False
         self._done = 0                 # fillets made by this command (Undo)
+        header = self._header()
+        if header is not None:
+            # the drawing's own radius, as the classic CAD keeps it
+            type(self).radius = float(header.get("$FILLETRAD", type(self).radius))
         self._announce()
+
+    def _header(self):
+        """The drawing's header, or None without a window (headless)."""
+        services = self.ctx.services
+        window = getattr(services, "window", None) if services else None
+        document = getattr(window, "document", None)
+        return document.doc.header if document is not None else None
 
     def _fmt(self, value: float) -> str:
         from core import units as units_mod
@@ -1370,6 +1381,9 @@ class FilletTool(Tool):
                     self.ctx.echo(tr("Value must be positive."))
                     return True
                 type(self).radius = r
+                header = self._header()
+                if header is not None:
+                    header["$FILLETRAD"] = r
             self._resume()
             return True
         if self._await == "trim":

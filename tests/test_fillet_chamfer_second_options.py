@@ -90,3 +90,16 @@ def test_the_polyline_prompts_offer_the_settings(win):
     win._on_command_submitted("CHAMFER")
     win._on_command_submitted("P")
     assert _last(win).endswith("Select 2D polyline or [Distance/Angle/Method]:")
+
+
+def test_fillet_starts_with_the_drawings_radius_and_keeps_a_new_one(win):
+    """FILLET said "Radius = 0.000" in a drawing whose $FILLETRAD is 10;
+    the classic CAD starts from the drawing's radius and saves a new one
+    into it."""
+    win.document.doc.header["$FILLETRAD"] = 10.0
+    win._on_command_submitted("FILLET")
+    history = win.command_line.history.toPlainText()
+    assert "Radius = 10.000" in history
+    for answer in ("R", "7"):
+        win._on_command_submitted(answer)
+    assert win.document.doc.header["$FILLETRAD"] == 7.0

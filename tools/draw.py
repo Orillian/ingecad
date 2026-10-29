@@ -232,7 +232,7 @@ class CircleTool(Tool):
     def _radius_prompt(self) -> None:
         r = type(self).last_radius
         if r is not None:
-            self.prompt("Specify radius of circle or [Diameter] <{r:g}>:", r=r)
+            self.prompt("Specify radius of circle or [Diameter] <{r}>:", r=self.length_text(r))
         else:
             self.prompt("Specify radius of circle or [Diameter]:")
 
@@ -274,7 +274,7 @@ class CircleTool(Tool):
                 self._mode = "CD"
                 r = type(self).last_radius
                 if r is not None:
-                    self.prompt("Specify diameter of circle <{d:g}>:", d=2 * r)
+                    self.prompt("Specify diameter of circle <{d}>:", d=self.length_text(2 * r))
                 else:
                     self.prompt("Specify diameter of circle:")
                 return True
@@ -347,7 +347,7 @@ class CircleTool(Tool):
             else:
                 r = type(self).last_radius
                 if r is not None:
-                    self.prompt("Specify radius of circle <{r:g}>:", r=r)
+                    self.prompt("Specify radius of circle <{r}>:", r=self.length_text(r))
                 else:
                     self.prompt("Specify radius of circle:")
             return
@@ -359,7 +359,7 @@ class CircleTool(Tool):
                 self._mode = "CD"
                 r = type(self).last_radius
                 if r is not None:
-                    self.prompt("Specify diameter of circle <{d:g}>:", d=2 * r)
+                    self.prompt("Specify diameter of circle <{d}>:", d=self.length_text(2 * r))
                 else:
                     self.prompt("Specify diameter of circle:")
             elif len(self._pts) == 1:
@@ -953,8 +953,8 @@ class TextTool(Tool):
         self._await = None
         self._style = None
         style, fixed = self._style_info()
-        self.ctx.echo(tr('Current text style: "{s}"  Text height: {h:g}',
-                         s=style, h=fixed or self._textsize()))
+        self.ctx.echo(tr('Current text style: "{s}"  Text height: {h}',
+                         s=style, h=self.length_text(fixed or self._textsize())))
         self.prompt("Specify start point of text or [Justify/Style]:")
 
     # -- TEXTSIZE: the drawing's own, as AutoCAD keeps it ----------------------
@@ -1009,15 +1009,15 @@ class TextTool(Tool):
             # "The Specify Paper Text Height prompt is displayed only if the
             # current text style is annotative" (p. 1933): the model height
             # follows from the annotation scale when the text is created
-            self.prompt("Specify paper text height <{h:g}>:",
-                        h=self._textsize())
+            self.prompt("Specify paper text height <{h}>:",
+                        h=self.length_text(self._textsize()))
         else:
-            self.prompt("Specify height <{h:g}>:",
-                        h=self._textsize())
+            self.prompt("Specify height <{h}>:",
+                        h=self.length_text(self._textsize()))
 
     def _rotation_prompt(self) -> None:
-        self.prompt("Specify rotation angle of text <{r:g}>:",
-                    r=type(self).last_rotation)
+        self.prompt("Specify rotation angle of text <{r}>:",
+                    r=self.angle_text(type(self).last_rotation))
 
     def on_point(self, point: Point) -> None:
         if self.typing:
@@ -1037,8 +1037,8 @@ class TextTool(Tool):
                 point[1] - self._pos[1], point[0] - self._pos[0]))
             self._await = None
             if self._align == "FIT":
-                self.prompt("Specify height <{h:g}>:",
-                            h=self._textsize())
+                self.prompt("Specify height <{h}>:",
+                            h=self.length_text(self._textsize()))
                 return
             # ALIGNED: height derives from the fit; nominal for the entity
             span = max(math.dist(self._pos, self._p2), 1e-9)
@@ -1471,8 +1471,8 @@ class PlineTool(Tool):
         if not self._verts:
             self._verts.append(point)
             self.last_point = point
-            self.ctx.echo(tr("Current line-width is {w:g}",
-                             w=type(self).current_width))
+            self.ctx.echo(tr("Current line-width is {w}",
+                             w=self.length_text(type(self).current_width)))
             self._line_prompt()
             return
         if self._await == "arc_second":
@@ -1609,11 +1609,11 @@ class PlineTool(Tool):
             key = "halfwidth_end" if factor == 2.0 else "width_end"
             self._await = key
             if factor == 2.0:
-                self.prompt("Specify ending half-width <{w:g}>:",
-                            w=self._pending["sw"] / 2.0)
+                self.prompt("Specify ending half-width <{w}>:",
+                            w=self.length_text(self._pending["sw"] / 2.0))
             else:
-                self.prompt("Specify ending width <{w:g}>:",
-                            w=self._pending["sw"])
+                self.prompt("Specify ending width <{w}>:",
+                            w=self.length_text(self._pending["sw"]))
             return True
         if self._await in ("width_end", "halfwidth_end"):
             factor = 2.0 if self._await == "halfwidth_end" else 1.0
@@ -1747,12 +1747,12 @@ class PlineTool(Tool):
                 return True
             if t in ("W", "WIDTH"):
                 self._await = "width_start"
-                self.prompt("Specify starting width <{w:g}>:", w=self._sw)
+                self.prompt("Specify starting width <{w}>:", w=self.length_text(self._sw))
                 return True
             if t in ("H", "HALFWIDTH"):
                 self._await = "halfwidth_start"
-                self.prompt("Specify starting half-width <{w:g}>:",
-                            w=self._sw / 2.0)
+                self.prompt("Specify starting half-width <{w}>:",
+                            w=self.length_text(self._sw / 2.0))
                 return True
             if t in ("L", "LENGTH"):
                 self._await = "length"
@@ -1809,12 +1809,12 @@ class PlineTool(Tool):
             return True
         if t in ("W", "WIDTH"):
             self._await = "width_start"
-            self.prompt("Specify starting width <{w:g}>:", w=self._sw)
+            self.prompt("Specify starting width <{w}>:", w=self.length_text(self._sw))
             return True
         if t in ("H", "HALFWIDTH"):
             self._await = "halfwidth_start"
-            self.prompt("Specify starting half-width <{w:g}>:",
-                        w=self._sw / 2.0)
+            self.prompt("Specify starting half-width <{w}>:",
+                        w=self.length_text(self._sw / 2.0))
             return True
         if t in ("U", "UNDO") and self._segs:
             self._segs.pop()
@@ -1879,12 +1879,16 @@ class RectangTool(Tool):
         if (cls.chamfer != (0.0, 0.0) or cls.fillet or cls.elevation
                 or cls.thickness or cls.pl_width or cls.rotation):
             self.ctx.echo(tr(
-                "Current rectangle modes: Chamfer={c1:g} x {c2:g} "
-                "Elevation={e:g} Fillet={f:g} Thickness={t:g} Width={w:g} "
-                "Rotation={r:g}",
-                c1=cls.chamfer[0], c2=cls.chamfer[1], e=cls.elevation,
-                f=cls.fillet, t=cls.thickness, w=cls.pl_width,
-                r=cls.rotation))
+                "Current rectangle modes: Chamfer={c1} x {c2} "
+                "Elevation={e} Fillet={f} Thickness={t} Width={w} "
+                "Rotation={r}",
+                c1=self.length_text(cls.chamfer[0]),
+                c2=self.length_text(cls.chamfer[1]),
+                e=self.length_text(cls.elevation),
+                f=self.length_text(cls.fillet),
+                t=self.length_text(cls.thickness),
+                w=self.length_text(cls.pl_width),
+                r=self.angle_text(cls.rotation)))
         self._first_prompt()
 
     def _first_prompt(self) -> None:
@@ -2013,8 +2017,8 @@ class RectangTool(Tool):
             self._pending["d1"] = value
             self._await = "chamfer2"
             self.prompt(
-                "Specify second chamfer distance for rectangles <{d:g}>:",
-                d=value)
+                "Specify second chamfer distance for rectangles <{d}>:",
+                d=self.length_text(value))
             return True
         if self._await == "chamfer2":
             if value is None or value < 0:
@@ -2052,13 +2056,13 @@ class RectangTool(Tool):
         if self._await == "area_lw":
             if t in ("L", "LENGTH"):
                 self._await = "area_len"
-                self.prompt("Enter rectangle length <{v:g}>:",
-                            v=cls.last_length)
+                self.prompt("Enter rectangle length <{v}>:",
+                            v=self.length_text(cls.last_length))
                 return True
             if t in ("W", "WIDTH"):
                 self._await = "area_wid"
-                self.prompt("Enter rectangle width <{v:g}>:",
-                            v=cls.last_width)
+                self.prompt("Enter rectangle width <{v}>:",
+                            v=self.length_text(cls.last_width))
                 return True
             return False
         if self._await in ("area_len", "area_wid"):
@@ -2080,8 +2084,8 @@ class RectangTool(Tool):
                 return False
             cls.last_length = value
             self._await = "dim_wid"
-            self.prompt("Specify width for rectangles <{v:g}>:",
-                        v=cls.last_width)
+            self.prompt("Specify width for rectangles <{v}>:",
+                        v=self.length_text(cls.last_width))
             return True
         if self._await == "dim_wid":
             if value is None or value <= 0:
@@ -2110,32 +2114,32 @@ class RectangTool(Tool):
             if t in ("C", "CHAMFER"):
                 self._await = "chamfer1"
                 self.prompt(
-                    "Specify first chamfer distance for rectangles <{d:g}>:",
-                    d=cls.chamfer[0])
+                    "Specify first chamfer distance for rectangles <{d}>:",
+                    d=self.length_text(cls.chamfer[0]))
                 return True
             if t in ("E", "ELEVATION"):
                 self._await = "elevation"
                 self.prompt(
-                    "Specify the elevation for rectangles <{v:g}>:",
-                    v=cls.elevation)
+                    "Specify the elevation for rectangles <{v}>:",
+                    v=self.length_text(cls.elevation))
                 return True
             if t in ("F", "FILLET"):
                 self._await = "fillet"
                 self.prompt(
-                    "Specify fillet radius for rectangles <{v:g}>:",
-                    v=cls.fillet)
+                    "Specify fillet radius for rectangles <{v}>:",
+                    v=self.length_text(cls.fillet))
                 return True
             if t in ("T", "THICKNESS"):
                 self._await = "thickness"
                 self.prompt(
-                    "Specify thickness for rectangles <{v:g}>:",
-                    v=cls.thickness)
+                    "Specify thickness for rectangles <{v}>:",
+                    v=self.length_text(cls.thickness))
                 return True
             if t in ("W", "WIDTH"):
                 self._await = "plwidth"
                 self.prompt(
-                    "Specify line width for rectangles <{v:g}>:",
-                    v=cls.pl_width)
+                    "Specify line width for rectangles <{v}>:",
+                    v=self.length_text(cls.pl_width))
                 return True
             return False
         if t in ("A", "AREA"):
@@ -2146,14 +2150,14 @@ class RectangTool(Tool):
             return True
         if t in ("D", "DIMENSIONS"):
             self._await = "dim_len"
-            self.prompt("Specify length for rectangles <{v:g}>:",
-                        v=cls.last_length)
+            self.prompt("Specify length for rectangles <{v}>:",
+                        v=self.length_text(cls.last_length))
             return True
         if t in ("R", "ROTATION"):
             self._await = "rot"
             self.prompt(
-                "Specify rotation angle or [Pick points] <{v:g}>:",
-                v=cls.rotation)
+                "Specify rotation angle or [Pick points] <{v}>:",
+                v=self.angle_text(cls.rotation))
             return True
         return False
 

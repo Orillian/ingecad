@@ -207,7 +207,7 @@ def test_circle_diameter_and_last_radius_default():
     tool2 = CircleTool(h.ctx)
     tool2.start()
     tool2.on_point((20.0, 0.0))
-    assert "<5>" in h.prompts[-1]                  # CIRCLERAD default shown
+    assert "<5.0000>" in h.prompts[-1]   # CIRCLERAD, at the drawing precision
     tool2.on_enter()                               # accept <last>
     circles = h.msp.query("CIRCLE")
     assert circles[1].dxf.radius == pytest.approx(5.0)

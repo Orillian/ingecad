@@ -130,7 +130,7 @@ def test_lengthen_tool_reports_then_changes_with_autocad_prompts():
     assert "Current length: 10.0000" in h.text
     assert _xy(line.dxf.end) == pytest.approx((10.0, 0.0))
     assert tool.on_option("DE") is True
-    assert "Enter delta length or [Angle] <0>:" in h.out[-1]
+    assert "Enter delta length or [Angle] <0.0000>:" in h.out[-1]
     assert tool.on_option("5") is True
     assert "Select an object to change or [Undo]:" in h.out[-1]
     h.picks = [line]
@@ -147,7 +147,7 @@ def test_lengthen_tool_reports_then_changes_with_autocad_prompts():
     tool2 = LengthenTool(h.ctx)
     tool2.start()
     tool2.on_option("DE")
-    assert "<5>" in h.out[-1]
+    assert "<5.0000>" in h.out[-1]
 
 
 def test_lengthen_tool_angle_branch_and_dynamic_mode():

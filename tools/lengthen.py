@@ -45,7 +45,7 @@ class LengthenTool(Tool):
         if self._mode is None:
             if token in ("DE", "DELTA"):
                 self._await = "DE"
-                self.prompt("Enter delta length or [Angle] <{v:g}>:", v=self._delta)
+                self.prompt("Enter delta length or [Angle] <{v}>:", v=self.length_text(self._delta))
                 return True
             if token in ("P", "PERCENT"):
                 self._await = "P"
@@ -53,7 +53,7 @@ class LengthenTool(Tool):
                 return True
             if token in ("T", "TOTAL"):
                 self._await = "T"
-                self.prompt("Specify total length or [Angle] <{v:g}>:", v=self._total)
+                self.prompt("Specify total length or [Angle] <{v}>:", v=self.length_text(self._total))
                 return True
             if token in ("DY", "DYNAMIC"):
                 self._mode = "DY"
@@ -73,9 +73,9 @@ class LengthenTool(Tool):
         if self._await in ("DE", "T") and token in ("A", "ANGLE"):
             self._await = "DEA" if self._await == "DE" else "TA"
             if self._await == "DEA":
-                self.prompt("Enter delta angle <{v:g}>:", v=self._delta_angle)
+                self.prompt("Enter delta angle <{v}>:", v=self.angle_text(self._delta_angle))
             else:
-                self.prompt("Specify total angle <{v:g}>:", v=self._total_angle)
+                self.prompt("Specify total angle <{v}>:", v=self.angle_text(self._total_angle))
             return True
         stripped = text.strip()
         defaults = {"DE": cls._delta, "DEA": cls._delta_angle, "P": cls._percent,

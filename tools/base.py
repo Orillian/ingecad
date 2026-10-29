@@ -71,6 +71,26 @@ class Tool:
     #: as a distance can never be eaten by an earlier prompt's Delete.
     _prompt_source: str = ""
 
+    def length_text(self, value: float) -> str:
+        """A length as the drawing writes it (LUNITS/LUPREC): the classic
+        ``<10.0000>`` at a prompt's default, not Python's ``<10>``."""
+        return self._units_text(value, "length")
+
+    def angle_text(self, degrees: float) -> str:
+        """An angle as the drawing writes it (AUNITS/AUPREC)."""
+        return self._units_text(degrees, "angle")
+
+    def _units_text(self, value: float, kind: str) -> str:
+        from core import units as units_mod
+
+        try:
+            u = self.ctx.services.units()
+            if kind == "angle":
+                return units_mod.format_angle(value, u.aunits, u.auprec)
+            return units_mod.format_length(value, u.lunits, u.luprec)
+        except Exception:  # noqa: BLE001 -- no drawing units: the classic default
+            return f"{value:g}" if kind == "angle" else f"{value:.4f}"
+
     def prompt(self, source: str, **kwargs) -> None:
         """Show ``source`` translated, and remember it for :meth:`option`.
 

@@ -518,8 +518,8 @@ class HatchCliTool(HatchTool):
                 return False
             self.settings["scale"] = value
             self._await = "angle"
-            self.prompt("Specify an angle for the pattern <{a:g}>:",
-                        a=self.settings["angle"])
+            self.prompt("Specify an angle for the pattern <{a}>:",
+                        a=self.angle_text(self.settings["angle"]))
             return True
         if self._await == "angle":
             if text == "":
@@ -538,8 +538,8 @@ class HatchCliTool(HatchTool):
                 return False
             self._pending["ua"] = value
             self._await = "user_spacing"
-            self.prompt("Specify spacing between the lines <{s:g}>:",
-                        s=cls._user[1])
+            self.prompt("Specify spacing between the lines <{s}>:",
+                        s=self.length_text(cls._user[1]))
             return True
         if self._await == "user_spacing":
             if text == "":
@@ -663,8 +663,8 @@ class HatchCliTool(HatchTool):
             return True
         if upper in ("U", "USER", "USER DEFINED"):
             self._await = "user_angle"
-            self.prompt("Specify angle for crosshatch lines <{a:g}>:",
-                        a=type(self)._user[0])
+            self.prompt("Specify angle for crosshatch lines <{a}>:",
+                        a=self.angle_text(type(self)._user[0]))
             return True
         # optional island-style suffix: NAME,N / NAME,O / NAME,I
         name = upper

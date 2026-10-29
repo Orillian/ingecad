@@ -230,12 +230,12 @@ class ChamferTool(Tool):
         mode = tr("TRIM") if trimmode.trimmode() else tr("NOTRIM")
         if cls.method == "A":
             self.ctx.echo(tr("({mode} mode) Current chamfer Length = {l}, "
-                             "Angle = {a}", mode=mode, l=f"{cls.length:g}",
-                             a=f"{cls.angle:g}"))
+                             "Angle = {a}", mode=mode, l=self.length_text(cls.length),
+                             a=self.angle_text(cls.angle)))
         else:
             self.ctx.echo(tr("({mode} mode) Current chamfer Dist1 = {d1}, "
                              "Dist2 = {d2}", mode=mode,
-                             d1=f"{cls.dist1:g}", d2=f"{cls.dist2:g}"))
+                             d1=self.length_text(cls.dist1), d2=self.length_text(cls.dist2)))
         self._first_prompt()
 
     def _first_prompt(self) -> None:
@@ -294,7 +294,7 @@ class ChamferTool(Tool):
             cls.dist1 = value
             self._await = "d2"
             self.prompt("Specify second chamfer distance <{d}>:",
-                        d=f"{cls.dist1:g}")
+                        d=self.length_text(cls.dist1))
             return True
         if self._await == "d2":
             value = self._value(text, cls.dist1)
@@ -311,7 +311,7 @@ class ChamferTool(Tool):
             cls.length = value
             self._await = "angle"
             self.prompt("Specify chamfer angle from the first line <{a}>:",
-                        a=f"{cls.angle:g}")
+                        a=self.angle_text(cls.angle))
             return True
         if self._await == "angle":
             value = self._value(text, cls.angle)
@@ -348,12 +348,12 @@ class ChamferTool(Tool):
             if token in ("D", "DISTANCE"):
                 self._await = "d1"
                 self.prompt("Specify first chamfer distance <{d}>:",
-                            d=f"{cls.dist1:g}")
+                            d=self.length_text(cls.dist1))
                 return True
             if token in ("A", "ANGLE"):
                 self._await = "length"
                 self.prompt("Specify chamfer length on the first line <{d}>:",
-                            d=f"{cls.length:g}")
+                            d=self.length_text(cls.length))
                 return True
             if token in ("M", "METHOD"):
                 self._await = "method"
@@ -366,12 +366,12 @@ class ChamferTool(Tool):
         if token in ("D", "DISTANCE"):
             self._await = "d1"
             self.prompt("Specify first chamfer distance <{d}>:",
-                        d=f"{cls.dist1:g}")
+                        d=self.length_text(cls.dist1))
             return True
         if token in ("A", "ANGLE"):
             self._await = "length"
             self.prompt("Specify chamfer length on the first line <{d}>:",
-                        d=f"{cls.length:g}")
+                        d=self.length_text(cls.length))
             return True
         if token in ("E", "METHOD"):
             self._await = "method"

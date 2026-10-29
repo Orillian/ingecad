@@ -105,8 +105,8 @@ class XlineTool(Tool):
             if t in ("O", "OFFSET"):
                 self._await = "offset_dist"
                 self.prompt(
-                    "Specify offset distance or [Through] <{d:g}>:",
-                    d=getattr(type(self), "_offset", 1.0))
+                    "Specify offset distance or [Through] <{d}>:",
+                    d=self.length_text(getattr(type(self), "_offset", 1.0)))
                 return True
         return False
 
@@ -412,7 +412,7 @@ class RevcloudTool(Tool):
         if cls.arc_length is None:
             cls.arc_length = self._auto_arc_length()
         self.ctx.echo(tr(
-            "Minimum arc length: {a:g}   Style: {s}", a=cls.arc_length,
+            "Minimum arc length: {a}   Style: {s}", a=self.length_text(cls.arc_length),
             s=tr(cls.style)))
         self.prompt(
             "Specify first point or [Arc length/Object/Rectangular/"
@@ -494,8 +494,8 @@ class RevcloudTool(Tool):
         if self._mode is None:
             if t in ("A", "ARC"):
                 self._await = "arc"
-                self.prompt("Specify minimum length of arc <{a:g}>:",
-                            a=cls.arc_length)
+                self.prompt("Specify minimum length of arc <{a}>:",
+                            a=self.length_text(cls.arc_length))
                 return True
             if t in ("S", "STYLE"):
                 self._await = "style"

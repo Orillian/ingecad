@@ -159,20 +159,6 @@ class CopyTool(_DisplacementTool):
         self._ask_more()
 
 
-def _units_text(ctx, value: float, kind: str) -> str:
-    """A value as the drawing writes it (LUNITS/LUPREC, AUNITS/AUPREC):
-    The classic ``<30>`` and ``<1.0000>`` at a default."""
-    from core import units as units_mod
-
-    try:
-        u = ctx.services.units()
-        if kind == "angle":
-            return units_mod.format_angle(value, u.aunits, u.auprec)
-        return units_mod.format_length(value, u.lunits, u.luprec)
-    except Exception:  # noqa: BLE001 -- no drawing units: the classic default
-        return f"{value:g}" if kind == "angle" else f"{value:.4f}"
-
-
 class RotateTool(Tool):
     """ROTATE as the classic CAD asks for it (group E): the angle prompt
     offers the last angle as its default and Enter takes it; Reference asks
@@ -194,7 +180,7 @@ class RotateTool(Tool):
         self._copy = False
 
     def _text(self, value: float) -> str:
-        return _units_text(self.ctx, value, "angle")
+        return self.angle_text(value)
 
     def _ask_angle(self) -> None:
         self._phase = "angle"
@@ -340,7 +326,7 @@ class ScaleTool(Tool):
         self._copy = False
 
     def _text(self, value: float) -> str:
-        return _units_text(self.ctx, value, "length")
+        return self.length_text(value)
 
     def _ask_new(self) -> None:
         self._phase = "new"
@@ -552,7 +538,7 @@ class OffsetTool(Tool):
                          else tr("Source")))
         self.prompt("Specify offset distance or [Through/Erase/Layer] <{d}>:",
                     d=tr("Through") if cls.distance is None
-                    else f"{cls.distance:g}")
+                    else self.length_text(cls.distance))
 
     def _ask_object(self) -> None:
         self._phase = "object"
@@ -665,7 +651,7 @@ class OffsetTool(Tool):
                 self.ctx.echo(tr("Value must be positive."))
                 return
             type(self).distance = distance
-            self.ctx.echo(tr("Offset distance = {d}", d=f"{distance:g}"))
+            self.ctx.echo(tr("Offset distance = {d}", d=self.length_text(distance)))
             self._ask_object()
             return
 
@@ -1318,14 +1304,7 @@ class FilletTool(Tool):
         return document.doc.header if document is not None else None
 
     def _fmt(self, value: float) -> str:
-        from core import units as units_mod
-
-        services = self.ctx.services
-        try:
-            u = services.units()
-            return units_mod.format_length(value, u.lunits, u.luprec)
-        except Exception:  # noqa: BLE001 -- no drawing units: the classic default
-            return f"{value:.4f}"
+        return self.length_text(value)
 
     def _announce(self) -> None:
         from core import trimmode

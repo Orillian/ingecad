@@ -279,9 +279,9 @@ class AttDefCliTool(_TextPrompts, Tool):
         return last[1] if last else TextTool.last_rotation
 
     def _text_prompts(self) -> None:
-        self.ctx.echo(tr('Current text style: "{s}"  Text height: {h:g}',
+        self.ctx.echo(tr('Current text style: "{s}"  Text height: {h}',
                          s=self._style_name(),
-                         h=self._fixed_height() or self._default_height()))
+                         h=self.length_text(self._fixed_height() or self._default_height())))
         self._start_prompt()
 
     def _start_prompt(self) -> None:
@@ -290,8 +290,8 @@ class AttDefCliTool(_TextPrompts, Tool):
 
     def _rotation_prompt(self) -> None:
         self._await = "rotation"
-        self.prompt("Specify rotation angle of text <{r:g}>:",
-                    r=self._default_rotation())
+        self.prompt("Specify rotation angle of text <{r}>:",
+                    r=self.angle_text(self._default_rotation()))
 
     def on_point(self, point: Point) -> None:
         if self._await == "start":
@@ -307,7 +307,7 @@ class AttDefCliTool(_TextPrompts, Tool):
                 self._rotation_prompt()
             else:
                 self._await = "height"
-                self.prompt("Specify height <{h:g}>:", h=self._default_height())
+                self.prompt("Specify height <{h}>:", h=self.length_text(self._default_height()))
             return
         if self._await == "p2":
             self._p2 = point
@@ -315,7 +315,7 @@ class AttDefCliTool(_TextPrompts, Tool):
                 point[1] - self._insert[1], point[0] - self._insert[0]))
             if self._align == "FIT":
                 self._await = "height"
-                self.prompt("Specify height <{h:g}>:", h=self._default_height())
+                self.prompt("Specify height <{h}>:", h=self.length_text(self._default_height()))
                 return
             span = max(math.dist(self._insert, self._p2), 1e-9)
             self._height = span / 4.0
@@ -640,13 +640,13 @@ class AttEditCliTool(_TextPrompts, Tool):
                 return True
             if t in ("H", "HEIGHT"):
                 self._await = "height"
-                self.prompt("Specify new height <{h:g}>:",
-                            h=float(attrib.dxf.height))
+                self.prompt("Specify new height <{h}>:",
+                            h=self.length_text(float(attrib.dxf.height)))
                 return True
             if t in ("A", "ANGLE"):
                 self._await = "angle"
-                self.prompt("Specify new rotation angle <{r:g}>:",
-                            r=float(attrib.dxf.get("rotation", 0.0)))
+                self.prompt("Specify new rotation angle <{r}>:",
+                            r=self.angle_text(float(attrib.dxf.get("rotation", 0.0))))
                 return True
             if t in ("S", "STYLE"):
                 self._ask("style", "Enter new text style <{s}>:",

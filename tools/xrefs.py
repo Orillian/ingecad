@@ -106,7 +106,7 @@ class XAttachTool(Tool):
                 return True                 # 2D: the Z factor changes nothing
             if t in ("R", "ROTATE", "PR", "PROTATE"):
                 self._await = "rotation"
-                self.prompt("Specify rotation angle <{v:g}>:", v=self._rotation)
+                self.prompt("Specify rotation angle <{v}>:", v=self.angle_text(self._rotation))
                 return True
             return False
         if self._await in ("xscale", "yscale", "rotation"):
@@ -132,7 +132,7 @@ class XAttachTool(Tool):
                 self.prompt("Enter Y scale factor <use X scale factor>:")
             elif self._await == "yscale":
                 self._await = "rotation"
-                self.prompt("Specify rotation angle <{v:g}>:", v=self._rotation)
+                self.prompt("Specify rotation angle <{v}>:", v=self.angle_text(self._rotation))
             else:
                 self._attach()
             return True

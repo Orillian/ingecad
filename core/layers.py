@@ -355,20 +355,23 @@ _COLOR_NAMES = {"RED": 1, "YELLOW": 2, "GREEN": 3, "CYAN": 4, "BLUE": 5,
                 "MAGENTA": 6, "WHITE": 7}
 
 
+def name_matches(name: str, pattern: str) -> bool:
+    """One AutoCAD layer-name pattern: ``*``/``?`` wildcards, any case."""
+    import fnmatch
+
+    return fnmatch.fnmatchcase(name.lower(), pattern.lower())
+
+
 def match_layers(document, spec: str) -> list[str]:
     """Resolve an AutoCAD name list: comma-separated, ``*``/``?`` wildcards,
     case-insensitive. Empty spec -> the current layer (the official default)."""
-    import fnmatch
-
     all_names = [layer.dxf.name for layer in document.doc.layers]
     patterns = [p.strip() for p in spec.split(",") if p.strip()]
     if not patterns:
         return [current_layer_name(document)]
     result: list[str] = []
     for pattern in patterns:
-        low = pattern.lower()
-        hits = [n for n in all_names
-                if fnmatch.fnmatchcase(n.lower(), low)]
+        hits = [n for n in all_names if name_matches(n, pattern)]
         for n in hits:
             if n not in result:
                 result.append(n)

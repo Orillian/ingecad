@@ -2160,5 +2160,21 @@
   "MCP bridge off.": "Puente MCP apagado.",
   "Serve the drawing to MCP clients (MCPSTART / MCPSTOP)": "Servir el dibujo a clientes MCP (MCPSTART / MCPSTOP)",
   "Lets an AI program on this computer (Claude Desktop, Claude Code and others) work on the open drawing, through a local socket only you can use. Add IngeCAD to the program with this configuration:": "Permite que un programa de IA de esta computadora (Claude Desktop, Claude Code y otros) trabaje sobre el dibujo abierto, por un socket local que sólo usted puede usar. Agregue IngeCAD al programa con esta configuración:",
-  "Copy configuration": "Copiar configuración"
+  "Copy configuration": "Copiar configuración",
+  "Layer filter|All": "Todas",
+  "All Used Layers": "Todas las capas utilizadas",
+  "This filter's rule uses a property IngeCAD does not read yet: {rule}": "La regla de este filtro usa una propiedad que IngeCAD todavía no lee: {rule}",
+  "Turn layers on": "Activar capas",
+  "Turn layers off": "Desactivar capas",
+  "Thaw layers": "Reutilizar capas",
+  "Freeze layers": "Inutilizar capas",
+  "Lock layers": "Bloquear capas",
+  "Unlock layers": "Desbloquear capas",
+  "Nothing to change.": "No hay nada que cambiar.",
+  "turn the filter's layers on": "activar las capas del filtro",
+  "turn the filter's layers off": "desactivar las capas del filtro",
+  "freeze the filter's layers": "inutilizar las capas del filtro",
+  "thaw the filter's layers": "reutilizar las capas del filtro",
+  "lock the filter's layers": "bloquear las capas del filtro",
+  "unlock the filter's layers": "desbloquear las capas del filtro"
 }

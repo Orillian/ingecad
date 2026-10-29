@@ -5,6 +5,11 @@
 Columns: current, name, on, freeze, lock, color. Toolbar: new / delete /
 set-current. Double-click a row makes it current; the name cell renames.
 Every change routes through the layer Commands so undo/redo is exact.
+
+Above the table, when the drawing carries any, the layer filters AutoCAD
+saved with it (groups and property filters, ``core.layer_filters``): a
+click shows that filter's layers, a right-click turns them on, off, frozen
+or locked in one undo step.
 """
 from __future__ import annotations
 
@@ -15,16 +20,21 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMenu,
     QPushButton,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from core import layer_filters
 from core import layers as layer_ops
-from core.i18n import tr
+from core.i18n import tr, tr_context
 from views.color_dialog import (BYBLOCK, BYLAYER, STANDARD_ACIS, aci_label,
                                 aci_qcolor, swatch_icon)
 from views.icons import layer_state_icon
@@ -126,6 +136,11 @@ COLLAPSED_WIDTH = 22
 #: Where a state cell keeps its state (on, thawed, unlocked, plots)
 _STATE_ROLE = Qt.UserRole + 1
 
+#: The two filters every drawing has, ahead of the drawing's own (which
+#: are numbered from 0 in the tree's item data).
+_ALL_LAYERS = -1
+_USED_LAYERS = -2
+
 _PANEL_STYLE = """
 LayersPanel { background: #26262a; }
 LayersPanel QTableWidget { font-size: 11px; background: #1e1e22;
@@ -136,6 +151,7 @@ LayersPanel QToolButton { border: none; color: #c8c8c8; padding: 2px 5px;
     font-size: 11px; }
 LayersPanel QToolButton:hover { background: #3a3940; }
 LayersPanel #sideLabel { color: #b0b0b0; font-weight: bold; }
+LayersPanel QTreeWidget { font-size: 11px; background: #1e1e22; }
 """
 
 
@@ -231,11 +247,29 @@ class LayersPanel(QWidget):
         self.search.textChanged.connect(lambda *_: self.refresh())
         buttons.addWidget(self.search, 1)
 
+        # The layer filters (groups and property filters) the drawing
+        # carries, as the manager's tree. Hidden while there are none: in
+        # a sidebar, an "All" node alone would only take the table's room.
+        self.filters = QTreeWidget(self)
+        self.filters.setHeaderHidden(True)
+        self.filters.setIndentation(12)
+        self.filters.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.filters.customContextMenuRequested.connect(self._filter_menu)
+        self.filters.currentItemChanged.connect(self._filter_chosen)
+        self._filter_rows: list[layer_filters.FilterRow] = []
+        self._filter_signature = None
+        splitter = QSplitter(Qt.Vertical, self)
+        splitter.addWidget(self.filters)
+        splitter.addWidget(self.table)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([90, 400])
+        splitter.setChildrenCollapsible(False)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(1)
         layout.addLayout(buttons)
-        layout.addWidget(self.table)
+        layout.addWidget(splitter)
 
         self._loading = False
         self.refresh()
@@ -347,9 +381,14 @@ class LayersPanel(QWidget):
     def refresh(self) -> None:
         if self.document is None:
             self.table.setRowCount(0)
+            self._fill_filters([])
             return
         self._loading = True
         infos = layer_ops.layer_list(self.document)
+        self._fill_filters(layer_filters.filter_rows(self.document, infos))
+        shown = self._filter_names(infos)
+        if shown is not None:
+            infos = [i for i in infos if i.name in shown]
         needle = self.search.text().strip().lower() if hasattr(self, "search") else ""
         if needle:
             import fnmatch
@@ -362,6 +401,91 @@ class LayersPanel(QWidget):
             self._fill_row(row, info)
         self._loading = False
         self._size_columns()
+
+    # -- layer filters ----------------------------------------------------------
+    def _fill_filters(self, rows: list[layer_filters.FilterRow]) -> None:
+        """Rebuild the tree when the drawing's filters changed; otherwise
+        keep it, and with it the user's choice."""
+        self._filter_rows = rows
+        signature = (id(self.document), tuple(
+            (r.depth, r.layer_filter.kind, r.layer_filter.name) for r in rows))
+        if signature == self._filter_signature:
+            return
+        self._filter_signature = signature
+        self.filters.blockSignals(True)
+        self.filters.clear()
+        root = QTreeWidgetItem(self.filters, [tr_context("Layer filter|All")])
+        root.setData(0, Qt.UserRole, _ALL_LAYERS)
+        used = QTreeWidgetItem(root, [tr("All Used Layers")])
+        used.setData(0, Qt.UserRole, _USED_LAYERS)
+        parents = [root]
+        for index, row in enumerate(rows):
+            del parents[row.depth + 1:]
+            item = QTreeWidgetItem(parents[-1], [row.layer_filter.name])
+            item.setData(0, Qt.UserRole, index)
+            if row.layer_filter.kind == layer_filters.PROPERTY:
+                item.setToolTip(0, row.layer_filter.expression)
+            if row.names is None:
+                item.setDisabled(True)
+                item.setToolTip(0, tr(
+                    "This filter's rule uses a property IngeCAD does not "
+                    "read yet: {rule}", rule=row.layer_filter.expression))
+            parents.append(item)
+        self.filters.expandAll()
+        self.filters.setCurrentItem(root)
+        self.filters.blockSignals(False)
+        self.filters.setVisible(bool(rows))
+
+    def _chosen_filter(self) -> int:
+        item = self.filters.currentItem()
+        if item is None or not self._filter_rows:
+            return _ALL_LAYERS
+        return item.data(0, Qt.UserRole)
+
+    def _filter_names(self, infos) -> set[str] | None:
+        """The layers the chosen filter shows; None for all of them."""
+        chosen = self._chosen_filter()
+        if chosen == _ALL_LAYERS:
+            return None
+        if chosen == _USED_LAYERS:
+            return {i.name for i in infos if i.in_use}
+        if 0 <= chosen < len(self._filter_rows):
+            return set(self._filter_rows[chosen].names or ())
+        return None
+
+    def _filter_chosen(self, *_args) -> None:
+        self.refresh()
+
+    def _filter_menu(self, pos) -> None:
+        """Right-click on a filter: its layers on, off, frozen or locked,
+        as the manager's Visibility and Lock submenus."""
+        item = self.filters.itemAt(pos)
+        if item is None or self.document is None or item.isDisabled():
+            return
+        self.filters.setCurrentItem(item)
+        menu = QMenu(self)
+        for label, prop, value in (
+                (tr("Turn layers on"), "on", True),
+                (tr("Turn layers off"), "on", False),
+                (tr("Thaw layers"), "frozen", False),
+                (tr("Freeze layers"), "frozen", True),
+                (tr("Lock layers"), "locked", True),
+                (tr("Unlock layers"), "locked", False)):
+            if prop == "locked" and value:
+                menu.addSeparator()
+            menu.addAction(label, lambda p=prop, v=value: self.set_filter_state(p, v))
+        menu.exec(self.filters.viewport().mapToGlobal(pos))
+
+    def set_filter_state(self, prop: str, value: bool) -> None:
+        """Put every layer of the chosen filter in one state, one undo step."""
+        infos = layer_ops.layer_list(self.document)
+        shown = self._filter_names(infos)
+        names = [i.name for i in infos if shown is None or i.name in shown]
+        command = layer_filters.set_filter_state(self.document, names, prop, value)
+        if command is None:
+            self.window.command_line.echo(tr("Nothing to change."))
+            return
+        self._execute(command)
 
     def _fill_row(self, row: int, info: layer_ops.LayerInfo) -> None:
         # Status: current / in use / empty (the manager's official trio).

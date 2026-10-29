@@ -59,6 +59,8 @@ REVIEWED_FILE = "reviewed.toml"
 TIMEOUT = 20
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
 MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
+MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
+SCREENSHOTS_DIR = "screenshots"
 MAX_ARCHIVE_FILES = 2000
 MAX_EXTRACTED_BYTES = 128 * 1024 * 1024
 METADATA = "extension.json"
@@ -130,6 +132,38 @@ def catalog_cache_path(root: Optional[Path] = None) -> Path:
     """The last catalog that validated, for the next time there is no
     network. Beside the plugins folder, in the user's config."""
     return _root(root).parent / "extension-catalog.json"
+
+
+def screenshots_dir(root: Optional[Path] = None) -> Path:
+    """Where downloaded catalog screenshots are kept (and their card-sized
+    thumbnails, in ``thumbs/``), beside the catalog cache."""
+    return _root(root).parent / "extension-screenshots"
+
+
+def _screenshot_name(extension: Extension) -> Optional[str]:
+    """The entry's screenshot file name, if it is a plain one: a name
+    with a folder, ``..`` or a backslash is ignored, never followed."""
+    name = extension.screenshot
+    if (not name or "/" in name or "\\" in name or name.startswith(".")
+            or not re.match(r"^[A-Za-z0-9_.-]+$", name)):
+        return None
+    return name
+
+
+def screenshot_url(extension: Extension) -> Optional[str]:
+    """The catalog screenshot's address, next to the catalog."""
+    name = _screenshot_name(extension)
+    if name is None:
+        return None
+    return f"{catalog_base()}/{SCREENSHOTS_DIR}/{urllib.parse.quote(name)}"
+
+
+def screenshot_cache(extension: Extension, root: Optional[Path] = None) -> Optional[Path]:
+    """Where the downloaded screenshot of ``extension`` is (or will be) kept."""
+    name = _screenshot_name(extension)
+    if name is None:
+        return None
+    return screenshots_dir(root) / name
 
 
 # -- fetching -----------------------------------------------------------------

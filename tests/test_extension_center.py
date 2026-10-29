@@ -154,15 +154,16 @@ def _button(panel, name, ident):
 
 
 def _section_of(panel, ident) -> str:
-    """The section heading the card sits under."""
-    from PySide6.QtWidgets import QLabel
+    """The section heading the card's grid of tiles sits under."""
+    from PySide6.QtWidgets import QFrame, QLabel
 
     heading = ""
     for i in range(panel._cards.count()):
         widget = panel._cards.itemAt(i).widget()
-        if isinstance(widget, QLabel) and widget.text().startswith("<b>"):
-            heading = widget.text()[3:-4]
-        elif widget is not None and widget.objectName() == f"ext_card_{ident}":
+        if isinstance(widget, QLabel) and widget.objectName() == "ext_section":
+            heading = widget.text()
+        elif (widget is not None and widget.objectName().startswith("ext_grid_")
+              and widget.findChild(QFrame, f"ext_card_{ident}") is not None):
             return heading
     return ""
 
@@ -213,15 +214,47 @@ def _tools_menu(win):
 
 def test_a_tag_filters_the_available_list(qapp, user_dir, server):
     data = _package()
+    server.publish([_entry(data), _entry(data, id="mapas", tags=["gis"])])
+    win = _window(qapp)
+    try:
+        panel = _open_tab(win)
+        from PySide6.QtWidgets import QToolButton
+
+        def tag(name):
+            button = panel.findChild(QToolButton, f"ext_tag_{name}")
+            assert button is not None, f"no {name} tag button"
+            return button
+
+        # only the tags the catalog uses are offered
+        assert panel.findChild(QToolButton, "ext_tag_education") is None
+        tag("gis").click()
+        assert _card(panel, ID) is None and _card(panel, "mapas") is not None
+        assert _section_of(panel, "topografia") == "Included"   # not catalog
+        tag("drawing").click()
+        assert _card(panel, ID) is not None and _card(panel, "mapas") is None
+        tag("all").click()
+        assert _card(panel, ID) is not None and _card(panel, "mapas") is not None
+        assert panel.count.text() == f"{2 + len(win.plugins.loaded)} of " \
+            f"{2 + len(win.plugins.loaded)} extensions"
+    finally:
+        win.close()
+
+
+def test_the_search_filters_every_section(qapp, user_dir, server):
+    from PySide6.QtTest import QTest
+
+    data = _package()
     server.publish([_entry(data)])
     win = _window(qapp)
     try:
         panel = _open_tab(win)
-        combo = panel.tag_filter
-        combo.setCurrentIndex(combo.findData("gis"))
-        assert _card(panel, ID) is None
-        combo.setCurrentIndex(combo.findData("drawing"))
+        QTest.keyClicks(panel.search, "agrega un")      # its Spanish summary
+        QTest.qWait(400)
         assert _card(panel, ID) is not None
+        assert _card(panel, "topografia") is None
+        panel.search.clear()
+        QTest.qWait(400)
+        assert _card(panel, "topografia") is not None
     finally:
         win.close()
 
@@ -529,3 +562,180 @@ def test_the_catalog_refuses_plain_http_and_old_ingecad(user_dir):
         center.install_extension(future, user_dir)
     assert center.compatible(center._parse_extension(_entry(data, ingecad="0.6.9")))
     assert not center.compatible(center._parse_extension(_entry(data, ingecad="0.7")))
+
+
+# -- tiles and their pictures (as IngeTrazo's manager) -----------------------------
+
+def _pump(qapp, until, seconds: float = 5.0) -> bool:
+    """Process events until ``until()`` is true (a screenshot reply)."""
+    import time
+
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        qapp.processEvents()
+        if until():
+            return True
+        time.sleep(0.01)
+    return until()
+
+
+def _image(panel, ident):
+    from PySide6.QtWidgets import QLabel
+
+    card = _card(panel, ident)
+    assert card is not None, f"no card for {ident}"
+    return card.findChild(QLabel, "ext_image")
+
+
+def _shows_picture(label) -> bool:
+    pixmap = label.pixmap()
+    return pixmap is not None and not pixmap.isNull()
+
+
+def _cell(panel, ident) -> tuple[int, int]:
+    card = _card(panel, ident)
+    holder = card.parentWidget()
+    assert holder.objectName().startswith("ext_grid_")
+    grid = holder.layout()
+    row, column, _rows, _columns = grid.getItemPosition(grid.indexOf(card))
+    return row, column
+
+
+def test_the_columns_follow_the_window_width(qapp, user_dir, server):
+    """PLUGINS, then the window made narrower and wider: the same tiles
+    move into one, two, three columns."""
+    server.publish([])
+    win = _window(qapp)
+    try:
+        panel = _open_tab(win)
+        window = win._extensions_window
+        included = sorted(p for p, l in win.plugins.loaded.items() if l.bundled)
+        assert len(included) >= 3
+        first, second, third = included[:3]
+        card = _card(panel, second)
+        window.resize(760, 720)
+        _pump(qapp, lambda: panel.columns() == 1, 2)
+        assert panel.columns() == 1
+        assert [_cell(panel, p) for p in (first, second, third)] == [
+            (0, 0), (1, 0), (2, 0)]
+        window.resize(1300, 720)
+        _pump(qapp, lambda: panel.columns() == 2, 2)
+        assert [_cell(panel, p) for p in (first, second, third)] == [
+            (0, 0), (0, 1), (1, 0)]
+        assert _card(panel, second) is card, "re-flowed, not rebuilt"
+        window.resize(1800, 720)
+        _pump(qapp, lambda: panel.columns() == 3, 2)
+        assert [_cell(panel, p) for p in (first, second, third)] == [
+            (0, 0), (0, 1), (0, 2)]
+    finally:
+        win.close()
+
+
+def test_the_included_plugins_ship_a_small_picture():
+    from PySide6.QtGui import QImage
+
+    bundled = plugins.bundled_plugins_dir()
+    folders = sorted(p for p in bundled.iterdir() if (p / "__init__.py").is_file())
+    assert folders
+    for folder in folders:
+        picture = plugins.plugin_screenshot(folder)
+        assert picture is not None, f"{folder.name} has no screenshot.jpg"
+        assert picture.stat().st_size <= 150 * 1024, f"{picture} is too heavy"
+        assert not QImage(str(picture)).isNull(), f"{picture} does not decode"
+
+
+def test_an_included_card_shows_its_picture_from_disk(qapp, user_dir, server):
+    server.publish([])
+    win = _window(qapp)
+    try:
+        panel = _open_tab(win)
+        win._extensions_window.resize(1300, 900)
+        for ident in ("carreteras", "terreno"):
+            label = _image(panel, ident)
+            assert _pump(qapp, lambda: _shows_picture(label)), f"{ident}: no picture"
+            assert win.plugins.loaded[ident].screenshot.name == "screenshot.jpg"
+        assert not any(u.endswith((".jpg", ".png")) for u in server.asked)
+    finally:
+        win.close()
+
+
+def _local_catalog(tmp_path, monkeypatch, entries: list, shots: dict) -> Path:
+    """A catalog checkout on disk, as a maintainer points the center at it
+    (INGECAD_EXTENSIONS_BASE=file://...): screenshots arrive through
+    QNetworkAccessManager exactly as from GitHub, with no network."""
+    base = tmp_path / "catalog-repo"
+    (base / "screenshots").mkdir(parents=True)
+    (base / "catalog.json").write_text(json.dumps({"format": 1, "extensions": entries}))
+    (base / "reviewed.toml").write_text("")
+    for name, data in shots.items():
+        (base / "screenshots" / name).write_bytes(data)
+    monkeypatch.setenv("INGECAD_EXTENSIONS_BASE", base.as_uri())
+    return base
+
+
+def _png(colour: str = "#479B1B") -> bytes:
+    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+    from PySide6.QtGui import QColor, QImage
+
+    image = QImage(320, 200, QImage.Format_RGB32)
+    image.fill(QColor(colour))
+    array = QByteArray()
+    buffer = QBuffer(array)
+    buffer.open(QIODevice.WriteOnly)
+    image.save(buffer, "PNG")
+    return bytes(array)
+
+
+def test_a_catalog_card_downloads_its_screenshot(qapp, user_dir, tmp_path,
+                                                monkeypatch):
+    data = _package()
+    _local_catalog(tmp_path, monkeypatch, [_entry(data, screenshot="demo.png")],
+                   {"demo.png": _png()})
+    win = _window(qapp)
+    try:
+        panel = _open_tab(win)
+        assert _section_of(panel, ID) == "Available"
+        win._extensions_window.resize(1300, 2400)       # every card on screen
+        label = _image(panel, ID)
+        assert _pump(qapp, lambda: _shows_picture(label)), "no screenshot"
+        entry = panel._catalog()[ID]
+        cached = center.screenshot_cache(entry, user_dir)
+        assert cached.read_bytes() == _png(), "kept for the next time offline"
+        # a rebuilt card is born with it, without asking again
+        panel.refresh()
+        assert _shows_picture(_image(panel, ID))
+        assert not panel._pending
+    finally:
+        win.close()
+
+
+def test_a_missing_or_broken_picture_keeps_the_placeholder(qapp, user_dir, tmp_path,
+                                                          monkeypatch):
+    data = _package()
+    entries = [_entry(data, id="roto", screenshot="roto.png"),
+               _entry(data, id="falta", screenshot="falta.png"),
+               _entry(data, id="nada", screenshot=None),
+               _entry(data, id="afuera", screenshot="../../etc/passwd")]
+    _local_catalog(tmp_path, monkeypatch, entries, {"roto.png": b"not an image"})
+    # a plugin copied by hand, its own picture broken
+    hand = user_dir / "mano"
+    hand.mkdir(parents=True)
+    (hand / "__init__.py").write_text(
+        "from core.plugins import PluginSpec\n"
+        "PLUGIN = PluginSpec(id='mano', name='By hand')\n")
+    (hand / "screenshot.jpg").write_bytes(b"\xff\xd8 broken")
+    win = _window(qapp)
+    try:
+        panel = _open_tab(win)
+        win._extensions_window.resize(1300, 2400)       # every card on screen
+        assert _pump(qapp, lambda: {"roto", "falta"} <= set(panel._failures))
+        for ident in ("roto", "falta", "nada", "afuera", "mano"):
+            label = _image(panel, ident)
+            assert not _shows_picture(label), ident
+            assert label.text() == "Preview unavailable", ident
+        assert panel._failures["roto"] == 1 and panel._failures["falta"] == 1
+        assert center.screenshot_url(panel._catalog()["afuera"]) is None
+        assert not center.screenshot_cache(panel._catalog()["roto"], user_dir).exists()
+    finally:
+        win.plugins.forget("mano")
+        win.close()

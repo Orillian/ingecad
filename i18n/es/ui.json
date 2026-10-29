@@ -2218,7 +2218,6 @@
   "Extensions are Python code: they run with the same access as IngeCAD to your files and your network. Install only what you trust. Reviewed means someone read that exact version.": "Las extensiones son código Python: se ejecutan con el mismo acceso que IngeCAD a sus archivos y a su red. Instale sólo lo que le merezca confianza. «Revisada» significa que alguien leyó esa versión exacta.",
   "Refresh": "Actualizar",
   "Download the catalog again": "Descargar de nuevo el catálogo",
-  "All categories": "Todas las categorías",
   "{name} uninstalled.": "{name} desinstalada.",
   "Included": "Incluidas",
   "Installed": "Instaladas",
@@ -2273,5 +2272,12 @@
   "*Invalid*": "*No válido*",
   "Specify second extension line origin or [Select/Undo] <Select>:": "Precise el origen de la segunda línea de referencia o [Seleccionar(S)/desHacer(U)] <Seleccionar>:",
   "Non-associative dimension created.": "Se ha creado una cota no asociativa.",
-  "Dimension text = {text}": "Texto de cota = {text}"
+  "Dimension text = {text}": "Texto de cota = {text}",
+  "Extensions": "Extensiones",
+  "Search extensions...": "Buscar extensiones...",
+  "{shown} of {total} extensions": "{shown} de {total} extensiones",
+  "Included with IngeCAD": "Incluida con IngeCAD",
+  "License: {license}": "Licencia: {license}",
+  "Preview unavailable": "Vista previa no disponible",
+  "No extension matches the search.": "Ninguna extensión coincide con la búsqueda."
 }

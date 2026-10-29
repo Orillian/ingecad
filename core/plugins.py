@@ -127,6 +127,11 @@ class LoadedPlugin:
             return "needs " + ", ".join(self.missing)
         return ""
 
+    @property
+    def screenshot(self) -> Optional[Path]:
+        """The picture its card shows in the extension manager, if any."""
+        return plugin_screenshot(self.location)
+
 
 @dataclass
 class _Activation:
@@ -147,6 +152,22 @@ def user_plugins_dir() -> Path:
     from core.paths import user_config_dir
 
     return user_config_dir() / "plugins"
+
+
+#: A plugin declares the picture of its card in the extension manager by
+#: shipping one of these files beside its ``__init__.py`` (the first found
+#: wins). A file, not a spec field: the folder travels whole in every
+#: package (PyInstaller datas, the Flatpak's ``cp -a``), the picture shows
+#: even when the plugin cannot be imported, and no network is asked.
+SCREENSHOT_FILES = ("screenshot.jpg", "screenshot.jpeg", "screenshot.png")
+
+
+def plugin_screenshot(folder: Path) -> Optional[Path]:
+    for name in SCREENSHOT_FILES:
+        path = Path(folder) / name
+        if path.is_file():
+            return path
+    return None
 
 
 def missing_requirements(spec: PluginSpec) -> tuple[str, ...]:

@@ -16,7 +16,11 @@ until enabled in the same window (**Tools ▸ Manage extensions…**, command `P
 
 ## The extension center
 
-The **extension manager** (a window of its own, as in IngeTrazo) lists three sections: *Included* (the bundled
+The **extension manager** (a window of its own, as in IngeTrazo) shows one
+tile per plugin -- a picture of it at work, who made it, the version, what
+it does and its buttons -- in as many columns as the window's width holds,
+with a search box and one button per catalog category. The tiles sit in
+three sections: *Included* (the bundled
 plugins), *Installed* (the user's own) and *Available* (the catalog). It
 reads `catalog.json` and `reviewed.toml` from
 `github.com/ingelibre/ingecad-extensions` the first time the window is
@@ -57,6 +61,25 @@ off as it was; uninstalling turns it off, deletes the folder and forgets
 its settings. `INGECAD_EXTENSIONS_BASE=file:///path/to/checkout` points
 the center at a local copy of the catalog repository, for whoever
 maintains it.
+
+### The picture on the tile
+
+A plugin declares its picture by shipping **`screenshot.jpg`** (or
+`screenshot.jpeg`, `screenshot.png`; the first found wins,
+`core.plugins.SCREENSHOT_FILES`) beside its `__init__.py`. A file, not a
+`PluginSpec` field: it is read from disk, never fetched, it shows even when
+the plugin cannot be imported, and it travels with the folder in every
+package (PyInstaller ships `plugins/` whole as data, the Flatpak copies it
+with `cp -a`). Keep it 16:10 and small -- the included ones are 800×500
+JPEGs under 150 KB, which the suite checks; the tile shows it cut to
+240×150.
+
+A catalog entry without a picture of its own in the zip names one with
+`screenshot`: a plain file name (no folder, no `..`) under `screenshots/`
+in the catalog repository, fetched the first time its tile is on screen
+and kept in `extension-screenshots/` beside the catalog cache, so it still
+shows offline. A plugin with neither -- or with one that does not decode --
+shows *Preview unavailable*.
 
 ## The smallest plugin
 

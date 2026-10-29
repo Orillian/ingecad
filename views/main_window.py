@@ -3843,7 +3843,14 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         window = QDialog(self)
         window.setObjectName("extensions_window")
         window.setWindowTitle(tr("Manage extensions") + " — IngeCAD")
-        window.resize(760, 720)
+        # two columns of tiles, as IngeTrazo's; never larger than the screen
+        width, height = 1180, 780
+        screen = self.screen()
+        if screen is not None:
+            room = screen.availableGeometry()
+            width, height = min(width, room.width()), min(height, room.height())
+        window.resize(width, height)
+        window.setMinimumSize(560, 420)
         self._extensions_panel = ExtensionsPanel(self, window)
         QVBoxLayout(window).addWidget(self._extensions_panel)
         self._extensions_window = window

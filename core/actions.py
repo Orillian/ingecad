@@ -313,8 +313,10 @@ def circle_from_3p(p1, p2, p3) -> tuple[tuple[float, float], float]:
     return (ux, uy), math.hypot(ax - ux, ay - uy)
 
 
-def add_arc_3p(p1, p2, p3) -> AddEntityCommand:
-    """Arc from start, a point on the arc, and end (AutoCAD ARC 3P)."""
+def arc_3p(p1, p2, p3):
+    """(center, radius, start_deg, end_deg) of the arc from ``p1`` through
+    ``p2`` to ``p3`` (AutoCAD ARC 3P) -- the arc drawn and the one its
+    preview shows. Raises ValueError for collinear points."""
     center, radius = circle_from_3p(p1, p2, p3)
     a1 = math.degrees(math.atan2(p1[1] - center[1], p1[0] - center[0]))
     a2 = math.degrees(math.atan2(p2[1] - center[1], p2[0] - center[0]))
@@ -323,6 +325,12 @@ def add_arc_3p(p1, p2, p3) -> AddEntityCommand:
     # point is not on the ccw sweep.
     if ((a2 - a1) % 360.0) > ((a3 - a1) % 360.0):
         a1, a3 = a3, a1
+    return center, radius, a1, a3
+
+
+def add_arc_3p(p1, p2, p3) -> AddEntityCommand:
+    """Arc from start, a point on the arc, and end (AutoCAD ARC 3P)."""
+    center, radius, a1, a3 = arc_3p(p1, p2, p3)
     return AddEntityCommand(
         "ARC",
         lambda msp: msp.add_arc((center[0], center[1]), radius, a1, a3))

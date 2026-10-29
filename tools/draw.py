@@ -667,12 +667,13 @@ class ArcTool(Tool):
         state = self._state
         try:
             if state == "THIRD":
+                # the arc that will be drawn, start through the second point
+                # to the cursor, as AutoCAD shows it -- not the whole circle
                 try:
-                    center, r = actions.circle_from_3p(
-                        self._start, self._second, cursor)
+                    return _arc_preview(actions.arc_3p(
+                        self._start, self._second, cursor))
                 except ValueError:
                     return [(self._start, self._second), (self._second, cursor)]
-                return _circle_preview(center, r)
             if state == "SC_END":
                 return _arc_preview(self._sce_geom(cursor))
             if state == "CONTINUE":

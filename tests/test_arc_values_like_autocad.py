@@ -93,3 +93,21 @@ def test_a_clicked_angle_after_the_end_is_measured_from_the_start(win):
     half = math.atan2(96, 60) / 2
     assert arc.dxf.radius == pytest.approx(50 / math.sin(half), abs=1e-6)
     assert arc.dxf.radius == pytest.approx(103.142, abs=1e-3)   # AutoCAD's LIST
+
+
+def test_the_three_point_preview_is_the_arc_not_the_circle(win):
+    """ARC 3P showed the whole circle through the three points while the
+    end was sought (Marco: "me sale todo el tiempo un círculo"); AutoCAD
+    shows the arc that will be drawn, and so does IngeCAD now."""
+    _type(win, "ARC", "0,0", "50,50")
+    cursor = (100, 0)
+    segments = win.tools.tool.preview_segments(cursor)
+    points = [p for seg in segments for p in seg]
+    # every point of the preview is on the upper half -- the arc from
+    # (0,0) through (50,50) to (100,0); the circle's lower half is not
+    assert min(y for _x, y in points) > -1e-6
+    assert max(y for _x, y in points) == pytest.approx(50, abs=0.5)
+    _click(win, *cursor)
+    (arc,) = _arcs(win)
+    assert (arc.dxf.start_angle % 360, arc.dxf.end_angle % 360) == \
+        pytest.approx((0, 180))

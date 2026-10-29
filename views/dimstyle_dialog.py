@@ -209,6 +209,18 @@ def _combo(pairs, value, translate: bool = True) -> QComboBox:
     return box
 
 
+def _arrow_combo(value) -> QComboBox:
+    """An arrowhead combo. A drawing stores AutoCAD's own arrowheads with a
+    leading underscore (``_DOT``, how they come back from a DWG); the list
+    names them without it, so a stored ``_DOT`` showed as Closed filled."""
+    name = str(value or "").upper()
+    if name.startswith("_"):
+        name = name[1:]
+    if name == "CLOSEDFILLED":
+        name = ""
+    return _combo(_ARROWS, name)
+
+
 def precision_samples(kind: str) -> list:
     """AutoCAD's precision list: (sample, DIMDEC/DIMADEC value).
 
@@ -417,13 +429,18 @@ class DimStyleEditorDialog(QDialog):
         sv = QVBoxLayout(sym)
         arr_group = QGroupBox(tr("Arrowheads"))
         f = QFormLayout(arr_group)
-        blk1 = a("dimblk1", a("dimblk", ""))
-        blk2 = a("dimblk2", a("dimblk", ""))
-        self.dimblk1 = _combo(_ARROWS, blk1)
+        # DIMSAH off draws DIMBLK at both ends: show what is drawn, not
+        # DIMBLK1/2, which nothing reads then
+        if a("dimsah", 0):
+            blk1 = a("dimblk1", a("dimblk", ""))
+            blk2 = a("dimblk2", a("dimblk", ""))
+        else:
+            blk1 = blk2 = a("dimblk", "")
+        self.dimblk1 = _arrow_combo(blk1)
         f.addRow(tr("First"), self.dimblk1)
-        self.dimblk2 = _combo(_ARROWS, blk2)
+        self.dimblk2 = _arrow_combo(blk2)
         f.addRow(tr("Second"), self.dimblk2)
-        self.dimldrblk = _combo(_ARROWS, a("dimldrblk", ""))
+        self.dimldrblk = _arrow_combo(a("dimldrblk", ""))
         f.addRow(tr("Leader"), self.dimldrblk)
         self.dimasz = _dspin(a("dimasz", 2.5))
         f.addRow(tr("Arrow size"), self.dimasz)
@@ -647,7 +664,16 @@ class DimStyleEditorDialog(QDialog):
     def changed_props(self) -> dict:
         """The DIMVARS the user actually changed in this dialog."""
         props = self.result_props()
-        return {k: v for k, v in props.items() if self._initial.get(k) != v}
+        changed = {k: v for k, v in props.items() if self._initial.get(k) != v}
+        if "dimblk1" in changed or "dimblk2" in changed:
+            # DIMBLK1/2 are read only with DIMSAH on, and the dialog always
+            # reports 1, so "unchanged" never wrote it: a style with DIMSAH 0
+            # -- Rafael's, and ISO-25's -- kept its arrows whatever was picked
+            # (eighth review, 28:50)
+            changed["dimsah"] = 1
+            changed.setdefault("dimblk1", props["dimblk1"])
+            changed.setdefault("dimblk2", props["dimblk2"])
+        return changed
 
     def _render_preview(self) -> None:
         self.preview.setPixmap(render_dim_preview(

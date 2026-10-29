@@ -13,14 +13,16 @@ notes); the two that bite:
 - Paper size, margins and plot offset are stored in **mm always**, whatever
   ``plot_paper_units`` says; and the paperspace coordinate origin sits at the
   lower-left corner of the *printable* area (+ plot offset), not the sheet
-  corner. :func:`paper_frame` owns that math.
+  corner. Paper space is drawn in plot units at the page setup's scale ("1 mm
+  = 0.001 units" puts an A3 sheet at 0.420 x 0.297). :func:`paper_frame`
+  owns that math, :func:`paper_mm_per_unit` the scale.
 """
 from __future__ import annotations
 
 import math
 from typing import Callable, Optional
 
-from ezdxf.lldxf.const import DXFValueError
+from ezdxf.lldxf.const import STD_SCALES, DXFValueError
 
 from core.actions import Prompt
 from core.commands import Command
@@ -1070,12 +1072,13 @@ def effective_page(layout) -> dict:
     """Current sheet as the user sees it: effective (rotation-applied) size
     and margins in mm, derived from the same math the renderer uses."""
     frame = paper_frame(layout)
-    x0, y0, x1, y1 = frame["sheet"]
+    k = frame["mm_per_unit"]                    # paper units back to mm
+    x0, y0, x1, y1 = (c * k for c in frame["sheet"])
     width, height = x1 - x0, y1 - y0
     printable = frame["printable"]
     if printable is None:
         printable = frame["sheet"]
-    px0, py0, px1, py1 = printable
+    px0, py0, px1, py1 = (c * k for c in printable)
     return {
         "width": width,
         "height": height,
@@ -1133,6 +1136,9 @@ STD_SCALE_CODES = {
     (1, 100): 26, (2, 1): 27, (4, 1): 28, (8, 1): 29, (10, 1): 30,
     (100, 1): 31, (1000, 1): 32,
 }
+# ...and the other way round, the full code-75 table (the inch scales too:
+# 1/128" = 1' is code 1), for reading a colleague's page setup.
+_STD_SCALE_RATIOS = STD_SCALES
 
 # Plot area (plot_type, code 74) choices shown on a layout tab.
 PLOT_TYPE_DISPLAY = 0
@@ -1191,8 +1197,8 @@ def page_setup_command(layout, width: float, height: float,
         "plot_paper_units": 1,          # mm (all lengths stored in mm anyway)
         "unit_factor": 1.0,
         "paper_size": f"{label}_({width:.2f}_x_{height:.2f}_MM)",
-        "limmin": (-(s_left + ox), -(s_bottom + oy)),
-        "limmax": (width - s_left - ox, height - s_bottom - oy),
+        "limmin": None,                 # set below, at the final plot scale
+        "limmax": None,
     }
     if getattr(layout, "is_modelspace", False):
         # the Model tab's limits are the drawing's, in drawing units, not
@@ -1246,6 +1252,13 @@ def page_setup_command(layout, width: float, height: float,
             flags = (flags | bit) if value else (flags & ~bit)
         fields["plot_layout_flags"] = flags
 
+    if "limmin" in fields:
+        # limits are paper-space units: at "1 mm = 0.001 units" an A3
+        # sheet's limits are 0.420 x 0.297, not 420 x 297
+        k = paper_mm_per_unit(layout, fields)
+        fields["limmin"] = (-(s_left + ox) / k, -(s_bottom + oy) / k)
+        fields["limmax"] = ((width - s_left - ox) / k,
+                            (height - s_bottom - oy) / k)
     return PageSetupCommand(layout, fields)
 
 
@@ -1258,11 +1271,14 @@ def paper_frame(layout) -> dict:
     Convention (verified against ezdxf's ``reset_paper_limits`` and the
     drawing add-on's ``Page.from_dxf_layout``): paperspace (0, 0) is the
     lower-left corner of the printable area plus the plot-origin offset;
-    everything is stored in mm and divided by 25.4 when the layout plots in
-    inches; ``plot_rotation`` 1/3 swaps the sheet dimensions and rotates the
+    everything is stored in mm and divided by :func:`paper_mm_per_unit`
+    (25.4 when the layout plots in inches, times the page setup's scale);
+    ``plot_rotation`` 1/3 swaps the sheet dimensions and rotates the
     margins with them.
 
-    Returns ``{"sheet": (x0, y0, x1, y1), "printable": (...) | None}``.
+    Returns ``{"sheet": (x0, y0, x1, y1), "printable": (...) | None,
+    "mm_per_unit": paper mm per unit}`` -- PLOT maps the sheet onto the page
+    with that same factor, so what is shown is what prints.
     """
     dxf = layout.dxf
 
@@ -1275,14 +1291,14 @@ def paper_frame(layout) -> dict:
             return default
         return v if math.isfinite(v) else default
 
-    unit = 25.4 if int(num("plot_paper_units", 1)) == 0 else 1.0
+    unit = paper_mm_per_unit(layout)
     w = num("paper_width") / unit
     h = num("paper_height") / unit
     m_top = num("top_margin") / unit
     m_right = num("right_margin") / unit
     m_bottom = num("bottom_margin") / unit
     m_left = num("left_margin") / unit
-    if not (0.0 < w < _MAX_PAPER and 0.0 < h < _MAX_PAPER):
+    if not (0.0 < w * unit < _MAX_PAPER and 0.0 < h * unit < _MAX_PAPER):
         w, h = _DEFAULT_PAPER
         m_top, m_right, m_bottom, m_left = _DEFAULT_MARGINS
         unit = 1.0
@@ -1307,7 +1323,56 @@ def paper_frame(layout) -> dict:
     ph = h - m_top - m_bottom
     if pw > 0.0 and ph > 0.0:
         printable = (-ox, -oy, -ox + pw, -oy + ph)
-    return {"sheet": sheet, "printable": printable}
+    return {"sheet": sheet, "printable": printable, "mm_per_unit": unit}
+
+
+def paper_mm_per_unit(layout, fields: Optional[dict] = None) -> float:
+    """Paper millimetres per paper-space drawing unit of a layout.
+
+    AutoCAD's page setup "Plot scale" on a layout: ``inches/mm = units``
+    (groups 142/143, in the plot paper units of group 72), or a standard
+    scale (group 75) when the use-standard-scale flag is set. A layout at
+    "1 mm = 0.001 units" is drawn in metres: its A3 sheet is 0.420 x 0.297
+    units, and it plots back at 420 x 297 mm. 1:1 in mm (every default
+    layout) is 1.0. "Fit to paper" and unusable ratios keep 1:1.
+
+    ``fields`` overrides the layout's own values (a page setup about to be
+    applied). The only place that answers this question: the sheet frame,
+    the limits, PLOT and the dialogs all ask here.
+    """
+    dxf = layout.dxf
+
+    def get(field, default):
+        if fields is not None and field in fields:
+            return fields[field]
+        try:
+            return dxf.get(field, default)
+        except Exception:
+            return default
+
+    def number(field, default):
+        try:
+            v = float(get(field, default))
+        except (TypeError, ValueError):
+            return default
+        return v if math.isfinite(v) else default
+
+    unit = 25.4 if int(number("plot_paper_units", 1)) == 0 else 1.0
+    flags = int(number("plot_layout_flags", 0))
+    std = int(number("standard_scale_type", 16))
+    if flags & FLAG_USE_STANDARD_SCALE:
+        if std == 0:
+            return unit                     # scaled to fit: no sheet scale
+        ratio = _STD_SCALE_RATIOS.get(std)
+        if ratio is not None:
+            return unit * ratio[0] / ratio[1]
+    num = number("scale_numerator", 1.0)
+    den = number("scale_denominator", 1.0)
+    if num > 0.0 and den > 0.0:
+        scale = num / den
+        if 1e-9 < scale < 1e9:
+            return unit * scale
+    return unit
 
 
 # -- the LAYOUT command (headless prompt flow) ----------------------------------

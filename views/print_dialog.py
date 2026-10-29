@@ -101,9 +101,17 @@ class PrintDialog(QDialog):
         drawing_mm = 1000.0
         if is_layout_tab:
             # a layout is drawn in paper units, whatever the model's
+            # at its page-setup scale: a sheet at "1 mm = 0.001 units" is
+            # drawn in metres
+            from core.layouts import paper_mm_per_unit
+
             sheet = window.document.doc.layouts.get(self._layout_name)
             inches = int(sheet.dxf.get("plot_paper_units", 1) or 0) == 0
             drawing_mm = 25.4 if inches else 1.0
+            scaled = paper_mm_per_unit(sheet)
+            for mm in (1.0, 10.0, 1000.0, 25.4, 304.8):
+                if abs(scaled - mm) <= 1e-9 * mm:
+                    drawing_mm = mm         # a unit the list can show
         elif window.document is not None:
             code = unit_info.insunits(window.document.doc)
             if code:
@@ -247,11 +255,7 @@ class PrintDialog(QDialog):
         if flags & FLAG_USE_STANDARD_SCALE and int(dxf.get("standard_scale_type", 0) or 0) == 0:
             self.scale.setCurrentIndex(0)       # scaled to fit
             return
-        try:
-            target = float(dxf.get("scale_numerator", 1.0)) / float(
-                dxf.get("scale_denominator", 1.0))
-        except (TypeError, ValueError, ZeroDivisionError):
-            return
+        target = layout_ops.paper_mm_per_unit(layout)
         # "1 mm = N units" is paper mm per drawing unit: find it in the list
         # for the drawing unit already chosen
         for i in range(1, self.scale.count()):

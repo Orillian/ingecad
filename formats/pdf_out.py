@@ -375,24 +375,34 @@ def plot(document, printer, layout_name: str | None = None,
 
 
 def layout_sheet(document, layout_name: str):
-    """((width_mm, height_mm), sheet_rect) of a paperspace layout's paper."""
+    """((width_mm, height_mm), sheet_rect) of a paperspace layout's paper:
+    the page size in true paper mm, the rect in paper-space units."""
+    width, height, sheet, _k = _layout_page(document, layout_name)
+    return (width, height), sheet
+
+
+def _layout_page(document, layout_name: str):
+    """(width_mm, height_mm, sheet_rect, mm_per_unit), all from
+    core.layouts.paper_frame -- the one answer to "how big is this sheet"."""
     from core.layouts import paper_frame
 
     layout = document.doc.layouts.get(layout_name)
-    sheet = paper_frame(layout)["sheet"]
+    frame = paper_frame(layout)
+    sheet, k = frame["sheet"], frame["mm_per_unit"]
     x0, y0, x1, y1 = sheet
-    return (x1 - x0, y1 - y0), sheet
+    return (x1 - x0) * k, (y1 - y0) * k, sheet, k
 
 
 def plot_layout(document, printer, layout_name: str,
                 ctb: str | None = None, painter: QPainter | None = None) -> None:
-    """Plot a paperspace layout at 1:1 — the sheet maps mm-to-mm onto the
-    page, so every viewport prints at its exact scale (the AutoCAD
-    contract: layouts plot at 1:1, the scale lives in the viewports)."""
-    _size, sheet = layout_sheet(document, layout_name)
+    """Plot a paperspace layout at its page-setup scale -- 1 mm = 1 unit on
+    a default layout, 1 mm = 0.001 units on a sheet drawn in metres -- so
+    the sheet fills the page at true size and every viewport prints at its
+    exact scale (the AutoCAD contract: the scale lives in the viewports)."""
+    _w, _h, sheet, mm_per_unit = _layout_page(document, layout_name)
     printer.setFullPage(True)   # the sheet IS the page; margins are drawn
-    plot(document, printer, layout_name, area=sheet, mm_per_unit=1.0,
-         physical_pens=True, ctb=ctb, painter=painter)   # paper mm on a layout
+    plot(document, printer, layout_name, area=sheet, mm_per_unit=mm_per_unit,
+         physical_pens=True, ctb=ctb, painter=painter)
 
 
 def publish(document, layout_names, path: str, ctb: str | None = None) -> int:

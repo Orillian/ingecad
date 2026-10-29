@@ -2011,7 +2011,24 @@ def rerender_dimension(document, dim) -> None:
     edited property): render, dress the block as AutoCAD writes it, drop
     the superseded block unless another dimension still shares it."""
     old_block = dim.dxf.get("geometry", None)
-    dim.render()
+    mid = dim.dxf.get("text_midpoint", None)
+    dimtype = int(dim.dxf.get("dimtype", 0))
+    if dimtype & 128 and dimtype & 7 in (3, 4) and mid is not None:
+        # A radius or diameter whose text the user placed keeps it there
+        # (DIMTMOVE 0 extends the leader to it): ezdxf's plain render
+        # ignores flag 128 and pulled every such text of Rafael's part back
+        # against its circle -- on any style change, making it annotative
+        # too. The text stays where the author's CAD drew it.
+        old_text = _block_text_insert(document, old_block)
+        override = dim.override()
+        override.user_location_override((mid.x, mid.y))
+        override.render()
+        new_text = _block_text_insert(document, dim.dxf.get("geometry", None))
+        if old_text is not None and new_text is not None:
+            _shift_block_text(document, dim, old_text[0] - new_text[0],
+                              old_text[1] - new_text[1])
+    else:
+        dim.render()
     _stamp_dim_block_byblock(document, dim)
     _drop_dim_block(document, old_block)
 

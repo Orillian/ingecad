@@ -324,6 +324,31 @@ def test_undoing_a_big_erase_rebuilds_the_caches_in_the_background(
     assert win.tools._pending_render == []
 
 
+def test_a_few_objects_with_a_big_block_count_as_a_big_edit(win, monkeypatch):
+    """Undo of an ERASE of 1 000 objects froze Plaza Yanque 2.3 s
+    (2026-10-28): six of them were references to blocks of 54 000 pieces,
+    all re-drawn and re-filed on the GUI thread, because the edit was
+    counted in objects. It is counted in work now."""
+    import views.tool_controller as tc_mod
+
+    doc = win.document.doc
+    block = doc.blocks.new("BIG")
+    for i in range(tc_mod.BIG_EDIT_COST + 100):
+        block.add_line((i, 0), (i, 1))
+    msp = win.document.modelspace()
+    ents = [msp.add_blockref("BIG", (0, 0))] + [
+        msp.add_line((0, i), (5, i)) for i in range(3)]
+    assert len(ents) < tc_mod.BIG_EDIT
+    win.tools._invalidate_geometry()
+    win.history.execute(actions.EraseCommand(ents))
+    regens = []
+    monkeypatch.setattr(win, "regen_in_background", lambda: regens.append(1))
+    monkeypatch.setattr(win.tools, "_start_warmer", lambda document: None)
+    win._cmd_undo()
+    assert regens == [1]                              # a background regen
+    assert win.tools._pending_render == []            # no overlay re-draw
+
+
 def test_the_highlight_never_builds_the_index_while_it_warms(win, monkeypatch):
     ents = _big_selection(win, monkeypatch)
     tools = win.tools

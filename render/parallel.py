@@ -59,11 +59,9 @@ def workers() -> int:
     return max(1, min(8, (os.cpu_count() or 1) - 1))
 
 
-def entity_costs(layout) -> list[tuple[str, int]]:
-    """(handle, estimated cost) of every entity, in redraw order."""
-    from ezdxf import reorder
-
-    doc = layout.doc
+def cost_model(doc):
+    """``cost(entity)``: the estimated work of drawing one entity -- a
+    block reference costs its whole content, nested blocks included."""
     memo: dict[str, int] = {}
 
     def block_cost(name: str, depth: int = 0) -> int:
@@ -84,6 +82,23 @@ def entity_costs(layout) -> list[tuple[str, int]]:
             return 1 + block_cost(entity.dxf.name, depth)
         return BASE_COST.get(kind, 1)
 
+    return cost
+
+
+def edit_cost(entities) -> int:
+    """The estimated work of drawing ``entities`` (live ones only)."""
+    entities = [e for e in entities if e.is_alive and e.doc is not None]
+    if not entities:
+        return 0
+    cost = cost_model(entities[0].doc)
+    return sum(cost(e) for e in entities)
+
+
+def entity_costs(layout) -> list[tuple[str, int]]:
+    """(handle, estimated cost) of every entity, in redraw order."""
+    from ezdxf import reorder
+
+    cost = cost_model(layout.doc)
     order = list(layout.get_redraw_order())
     entities = reorder.ascending(layout, order) if order else layout
     return [(e.dxf.handle, cost(e)) for e in entities]

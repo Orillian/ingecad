@@ -56,6 +56,9 @@ MERGE_THRESHOLD = 50
 #: An undo or redo touching more objects than this is shown by a background
 #: regen, not re-drawn one by one on the GUI thread (see after_history_change).
 BIG_EDIT = 2000
+#: ...or more drawing work than this (render.parallel's cost: a block
+#: reference costs its content): about 0.2 s of overlay on the GUI thread
+BIG_EDIT_COST = 5000
 #: A drawing with more objects than this in the current space waits for the
 #: background warmer instead of building its caches on the GUI thread.
 WARM_GUARD = 3000
@@ -1921,13 +1924,18 @@ class ToolController(QObject):
         touched.extend(getattr(command, "_pieces", None) or [])  # DIMASSOC 0
         for _orig, parts in (getattr(command, "pieces", None) or []):
             touched.extend(parts)
-        if len(touched) > BIG_EDIT:
+        from render.parallel import edit_cost
+
+        if len(touched) > BIG_EDIT or edit_cost(touched) > BIG_EDIT_COST:
             # Thousands of objects at once (undo of a colour change or an
             # ERASE over the whole plan): re-drawing them through the
             # overlay and re-filing each one in the pick index froze the
             # window 7-8 s on a 10 000-entity sheet. Rebuild everything in
             # the background instead -- the window keeps answering and the
             # result lands with the regen, as when the plan was opened.
+            # Counted as WORK, not objects: a thousand objects with six big
+            # block references among them (54 000 pieces once exploded)
+            # froze the undo 2.3 s while counting as "a thousand".
             removed = list(getattr(command, "removed_handles", None) or [])
             if removed:
                 self.window.viewport.hide_handles(removed)

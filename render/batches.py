@@ -19,6 +19,7 @@ glyph vertices are 90 % of the scene but invisible below a few pixels).
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -63,7 +64,7 @@ class Bucket:
     layer: str
     color: str
     lineweight: float = 0.25                              # mm, resolved
-    kind: str = ""          # "T" text glyphs, "TM" their masks, "X" XLINE/RAY
+    kind: str = ""          # "T" text glyphs, "TM" their masks, "X" XLINE, "R" RAY
     # DRAWORDER group: -1 sent to back, +1 brought to front, 0 default. The
     # packer sorts buckets by their dict key, and the backend puts this group
     # FIRST in that key, so back draws under everything and front over.
@@ -213,6 +214,9 @@ class Scene:
     # Raster IMAGE entities, drawn as textured quads (under the vectors for
     # group <= 0, over them for group > 0 — the DRAWORDER split).
     images: list = field(default_factory=list)
+    # XLINEs and RAYs: [ConstructionLine], so the viewport can carry them on
+    # past their baked ends to the edge of any view (#104).
+    construction: list = field(default_factory=list)
 
     @property
     def is_empty(self) -> bool:
@@ -222,6 +226,106 @@ class Scene:
             and self.triangles.vertex_count == 0
             and self.points.vertex_count == 0
         )
+
+
+#: Bucket kinds of the construction lines: XLINE both ways, RAY one way.
+CONSTRUCTION_KINDS = ("X", "R")
+
+
+@dataclass
+class ConstructionLine:
+    """One XLINE or RAY as baked: the segment from ``lo`` to ``hi`` (world,
+    float64), with ``hi`` the far end of a RAY. Past it the line goes on."""
+
+    handle: Optional[str]
+    lo: tuple[float, float]
+    hi: tuple[float, float]
+    ray: bool
+    rgba: tuple[int, int, int, int]
+
+
+def construction_lines(buckets) -> list[ConstructionLine]:
+    """The construction lines among ``buckets``, one per entity.
+
+    ezdxf bakes an XLINE as a segment of a fixed length (#98 made it ten
+    drawing diagonals), so zooming out far enough showed its ends (#104).
+    The baked segment stays -- it carries the linetype, the selection and
+    the surgical hiding -- and the viewport draws the rest from these.
+    A dashed line arrives as many collinear dashes of one owner, in order
+    from the line's start; they fold into one entry."""
+    out: list[ConstructionLine] = []
+    for bucket in buckets:
+        if bucket.kind not in CONSTRUCTION_KINDS or not bucket.lines:
+            continue
+        xy = np.asarray(bucket.lines, dtype=np.float64).reshape(-1, 2, 2)
+        owners = bucket.lines_owner
+        rgba = tuple(int(c) for c in _color_u8(bucket.color))
+        start = 0
+        while start < len(xy):
+            p0, p1 = xy[start]
+            d = p1 - p0
+            length = float(np.hypot(*d))
+            end = start + 1
+            if length <= 0.0 or not np.isfinite(length):
+                start = end
+                continue
+            d /= length
+            owner = owners[start] if start < len(owners) else None
+            # the following dashes of the same line: same owner, on the line
+            while end < len(xy):
+                if (end < len(owners) and owners[end] != owner):
+                    break
+                q = xy[end] - p0
+                if (abs(q[:, 0] * d[1] - q[:, 1] * d[0]) > 1e-9 * (
+                        length + np.abs(q).max())).any():
+                    break
+                end += 1
+            t = (xy[start:end].reshape(-1, 2) - p0) @ d
+            lo, hi = p0 + d * t.min(), p0 + d * t.max()
+            out.append(ConstructionLine(
+                owner, (float(lo[0]), float(lo[1])),
+                (float(hi[0]), float(hi[1])), bucket.kind == "R", rgba))
+            start = end
+    return out
+
+
+def construction_extensions(lines, rect, skip=()) -> list[tuple]:
+    """What lies past the baked ends of ``lines`` inside the world ``rect``
+    (x0, y0, x1, y1): [(x0, y0, x1, y1, rgba)], ready to draw. The pieces
+    are clipped to the rect, so their coordinates stay as small as the view
+    and float32 holds them at any zoom. ``skip``: handles to leave out
+    (hidden while edited)."""
+    rx0, ry0, rx1, ry1 = rect
+    out = []
+    for line in lines:
+        if line.handle is not None and line.handle in skip:
+            continue
+        (ax, ay), (bx, by) = line.lo, line.hi
+        dx, dy = bx - ax, by - ay
+        length = math.hypot(dx, dy)
+        if length <= 0.0:
+            continue
+        dx, dy = dx / length, dy / length
+        # Liang-Barsky: the parameter span of the line inside the rect
+        t0, t1 = -math.inf, math.inf
+        for p, q0, q1 in ((dx, rx0 - ax, rx1 - ax), (dy, ry0 - ay, ry1 - ay)):
+            if abs(p) < 1e-15:
+                if q0 > 0.0 or q1 < 0.0:
+                    break
+                continue
+            a, b = sorted((q0 / p, q1 / p))
+            t0, t1 = max(t0, a), min(t1, b)
+        else:
+            if t0 >= t1:
+                continue
+            spans = [(length, math.inf)] if line.ray else [
+                (-math.inf, 0.0), (length, math.inf)]
+            for s0, s1 in spans:
+                u0, u1 = max(t0, s0), min(t1, s1)
+                if u0 < u1:
+                    out.append((ax + dx * u0, ay + dy * u0,
+                                ax + dx * u1, ay + dy * u1, line.rgba))
+    return out
 
 
 def _grid_cells(prims_xy: np.ndarray, extents, verts_per_prim: int) -> np.ndarray:
@@ -509,7 +613,7 @@ def _world_extents(
     # Construction lines reach far past the drawing on purpose and are no
     # part of its extents (AutoCAD's Zoom Extents leaves them out too) --
     # unless they are all there is.
-    finite = [b for b in buckets if b.kind != "X"]
+    finite = [b for b in buckets if b.kind not in CONSTRUCTION_KINDS]
     if any(b.lines or b.triangles or b.points for b in finite):
         buckets = finite
     for use_hint in (lo_hi is not None, False):
@@ -592,6 +696,7 @@ def pack(buckets: dict[tuple, Bucket],
         points=_pack_standard(ordered, "points", 1, origin, extents, "points", hr),
     )
     scene.handle_ranges = hr
+    scene.construction = construction_lines(ordered)
     for im in images or []:
         corners = np.asarray(im["corners"], dtype=np.float64)
         corners[:, 0] -= origin[0]

@@ -62,9 +62,11 @@ HATCHING_TIMEOUT = 5.0
 # (a cadastre: 43 M of 49 M vertices) and the viewport hides them when they
 # would be smaller than a few pixels.
 _TEXT_TYPES = frozenset(("TEXT", "MTEXT", "ATTRIB", "ATTDEF"))
-#: Infinite by definition: drawn far past the drawing (frontend_config) and
-#: left out of its extents (bucket kind "X", batches._world_extents)
-_CONSTRUCTION_TYPES = frozenset(("XLINE", "RAY"))
+#: Infinite by definition: drawn far past the drawing (frontend_config),
+#: left out of its extents (batches._world_extents) and carried on to the
+#: edge of the screen at any zoom (batches.construction_lines). The bucket
+#: kind tells the two apart: an XLINE goes both ways, a RAY one.
+_CONSTRUCTION_TYPES = {"XLINE": "X", "RAY": "R"}
 #: How far a construction line reaches, in drawing diagonals (both halves of
 #: an XLINE together; a RAY all of it)
 CONSTRUCTION_SPAN = 10.0
@@ -128,7 +130,7 @@ class VertexBackend(Backend):
         super().enter_entity(entity, properties)
         dxftype = entity.dxftype()
         kind = ("T" if dxftype in _TEXT_TYPES
-                else "X" if dxftype in _CONSTRUCTION_TYPES else "")
+                else _CONSTRUCTION_TYPES.get(dxftype, ""))
         handle = getattr(entity.dxf, "handle", None)
         # Attribute the primitives to the OUTERMOST entity that has a handle.
         # Block content is drawn from virtual copies whose handle is None, and

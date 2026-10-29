@@ -40,7 +40,8 @@ from PySide6.QtWidgets import QRubberBand
 
 from core.paths import app_root
 from core.prefs import int_pref
-from render.batches import THICK_DTYPE, VERTEX_DTYPE, Batch, Scene
+from render.batches import (THICK_DTYPE, VERTEX_DTYPE, Batch, Scene,
+                            construction_extensions)
 from render.view import ViewTransform2D
 from views.apertures import PICKBOX_DEFAULT, pickbox
 
@@ -320,6 +321,7 @@ class Viewport(QOpenGLWidget):
         self.grid_on = False
         self.lwt_on = True
         self._grid_buf = None    # (vao, vbo, count, key) — rebuilt on view change
+        self._xline_buf = None   # (vao, vbo, count, key, origin) — see _draw_construction
         # Interactive tool hook (ToolController): hover/click/preview/markers.
         self.tool_delegate = None
         # MSPACE-active viewport rect (paper world coords) — drawn with the
@@ -1147,6 +1149,8 @@ class Viewport(QOpenGLWidget):
             if scissored:
                 gl.glDisable(GL_SCISSOR_TEST)
 
+        self._draw_construction(gl)
+
         if self._preview_scene is not None and self._preview_bufs:
             scissored = self.space_scissor(gl)
             preview_mvp = self._mvp(*self._preview_scene.origin, space=True)
@@ -1448,6 +1452,49 @@ class Viewport(QOpenGLWidget):
         vao.bind()
         gl.glDrawArrays(GL_LINES, 0, count)
         vao.release()
+
+    def _draw_construction(self, gl) -> None:
+        """XLINEs and RAYs past their baked ends, to the edge of the view.
+
+        The baked segment is long but finite, and zooming out far enough
+        showed where it ended (#104). The rest is clipped to the view each
+        frame in float64 and stored relative to the view centre, so float32
+        holds it at any zoom. A dashed line goes on solid out there, where
+        its dashes are long below a pixel."""
+        x0, y0, x1, y1 = self._view_world_rect()
+        cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        # a circle around the view: whatever the UCS turn of the screen
+        r = math.hypot(x1 - x0, y1 - y0) / 2.0 * 1.05
+        rect = (cx - r, cy - r, cx + r, cy + r)
+        pieces = []
+        if self._scene is not None and self._scene.construction:
+            pieces += construction_extensions(
+                self._scene.construction, rect, self._hidden_rgba)
+        overlay = self._overlay_scene
+        if (overlay is not None and overlay.construction
+                and not self.space_placement):
+            pieces += construction_extensions(overlay.construction, rect)
+        if not pieces:
+            return
+        key = (rect, tuple(pieces))
+        if self._xline_buf is None or self._xline_buf[3] != key:
+            if self._xline_buf is not None:
+                self._xline_buf[0].destroy()
+                self._xline_buf[1].destroy()
+            data = np.zeros(2 * len(pieces), dtype=VERTEX_DTYPE)
+            for k, (ax, ay, bx, by, rgba) in enumerate(pieces):
+                data["pos"][2 * k] = (ax - cx, ay - cy)
+                data["pos"][2 * k + 1] = (bx - cx, by - cy)
+                data["rgba"][2 * k:2 * k + 2] = rgba
+            vao, vbo, count = self._make_vao(data)
+            self._xline_buf = (vao, vbo, count, key, (cx, cy))
+        vao, _vbo, count, _key, origin = self._xline_buf
+        self._program.bind()
+        self._program.setUniformValue(self._loc_mvp, self._mvp(*origin))
+        vao.bind()
+        gl.glDrawArrays(GL_LINES, 0, count)
+        vao.release()
+        self._program.release()
 
     def _view_world_rect(self) -> tuple[float, float, float, float]:
         x0, y1 = self.view.screen_to_world(0.0, 0.0)          # top-left

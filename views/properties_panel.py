@@ -646,9 +646,47 @@ def _dimension_rows(panel, e):
                         [(tr(label), value) for label, value in
                          (("Centered", 0), ("Above", 1), ("Outside", 2),
                           ("JIS", 3), ("Below", 4))]))
+    from views.dimstyle_dialog import arrow_items
+
+    # AutoCAD's Lines & Arrows > Arrow 1 / Arrow 2: one arrowhead per end,
+    # per dimension (Rafael's eighth review, min 28 and 44)
+    rows += [
+        Row(tr("Arrow 1"), "combo", lambda e: _dim_arrow(e, 1),
+            lambda v: _set_dim_arrow(panel, 1, v), arrow_items()),
+        Row(tr("Arrow 2"), "combo", lambda e: _dim_arrow(e, 2),
+            lambda v: _set_dim_arrow(panel, 2, v), arrow_items()),
+    ]
     rows += _pt_rows(panel, "text_midpoint", tr("Text position"))
     rows.append(_annotative_row(panel))
     return (tr("Dimension"), rows)
+
+
+def _dim_arrow(e, end: int) -> str:
+    """The arrowhead ``e`` draws at ``end`` (1 or 2): DIMBLK1/DIMBLK2 under
+    DIMSAH, DIMBLK otherwise."""
+    from views.dimstyle_dialog import arrow_key
+
+    if _dim_var(e, "dimsah", 0):
+        return arrow_key(_dim_var(e, f"dimblk{end}", ""))
+    return arrow_key(_dim_var(e, "dimblk", ""))
+
+
+def _set_dim_arrow(panel, end: int, value: str) -> None:
+    """One end's arrowhead as a dimension override; the other end keeps
+    the one it draws."""
+    def mutate():
+        from core.modify import _rerender_dimension
+
+        for ent in panel._active():
+            if ent.dxftype() != "DIMENSION":
+                continue
+            ends = {1: _dim_arrow(ent, 1), 2: _dim_arrow(ent, 2), end: value}
+            override = ent.override()
+            override.set_arrows(blk1=ends[1], blk2=ends[2])
+            override["dimtsz"] = 0.0             # arrowheads, not ticks
+            override.commit()
+            _rerender_dimension(panel._document, ent)
+    panel._in_place(mutate, regen=True)
 
 
 def _dim_var(e, name: str, default):

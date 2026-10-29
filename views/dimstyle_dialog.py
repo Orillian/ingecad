@@ -209,16 +209,25 @@ def _combo(pairs, value, translate: bool = True) -> QComboBox:
     return box
 
 
-def _arrow_combo(value) -> QComboBox:
-    """An arrowhead combo. A drawing stores AutoCAD's own arrowheads with a
-    leading underscore (``_DOT``, how they come back from a DWG); the list
-    names them without it, so a stored ``_DOT`` showed as Closed filled."""
+def arrow_key(value) -> str:
+    """An arrowhead as the arrowhead lists name it. A drawing stores
+    AutoCAD's own arrowheads with a leading underscore (``_DOT``, how they
+    come back from a DWG), and Closed filled as "" or CLOSEDFILLED; a
+    stored ``_DOT`` showed as Closed filled."""
     name = str(value or "").upper()
     if name.startswith("_"):
         name = name[1:]
-    if name == "CLOSEDFILLED":
-        name = ""
-    return _combo(_ARROWS, name)
+    return "" if name == "CLOSEDFILLED" else name
+
+
+def arrow_items() -> list:
+    """(label, arrow key) for an arrowhead combo, labels translated."""
+    return [(tr(label), key) for label, key in _ARROWS]
+
+
+def _arrow_combo(value) -> QComboBox:
+    """An arrowhead combo."""
+    return _combo(_ARROWS, arrow_key(value))
 
 
 def precision_samples(kind: str) -> list:

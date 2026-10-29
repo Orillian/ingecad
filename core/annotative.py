@@ -854,7 +854,13 @@ class SetAnnotationScaleCommand(Command):
             old = current_scale(doc)
             self._old = old.name if old else None
             set_current_scale(doc, scale)
-        if self.autoscale and old is not None and old.handle != scale.handle:
+        # A drawing that never set the scale shows annotations at 1:1, so
+        # that is the scale being left. Asking for the stored one added
+        # nothing on the first change of a new drawing; the objects followed
+        # only once 1:1 had been picked explicitly -- which Rafael took for
+        # toggling ANNOAUTOSCALE off and on (eighth review, 11:44).
+        old = old or default_scale(doc)
+        if self.autoscale and old.handle != scale.handle:
             space = doc.modelspace()
             for entity in entities_supporting(space, old):
                 if not has_scale(entity, scale) and supports_representation(entity):

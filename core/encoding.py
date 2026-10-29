@@ -162,6 +162,84 @@ def repair_dimstyle_defaults(doc) -> int:
     return changed
 
 
+def repair_dimension_rotation(doc) -> int:
+    """Give back the rotation that Save as DWG took from rotated dimensions.
+
+    Until the vendored LibreDWG was fixed (tools/libredwg-patches,
+    2026-10-28), every vertical or rotated dimension IngeCAD saved as DWG
+    lost its rotation: the first re-render measured it horizontally, and a
+    vertical "12,4" read "0" (Rafael's eighth review). The *D block still
+    draws the dimension as it was, so it tells the rotation: the dimension
+    line is the block line through the definition point that is not in line
+    with either extension line origin (those are the extension lines).
+
+    Only dimensions of type 0 with no rotation are looked at, and only a
+    non-horizontal dimension line changes one. Returns how many changed.
+    """
+    import math
+
+    changed = 0
+    for dim in list(doc.entitydb.values()):
+        if not dim.is_alive or dim.dxftype() != "DIMENSION":
+            continue
+        d = dim.dxf
+        if d.get("dimtype", 0) & 7 != 0 or abs(d.get("angle", 0.0) or 0.0) > 1e-9:
+            continue
+        angle = _drawn_dimension_angle(dim)
+        if angle is None or abs(math.sin(math.radians(angle))) < 1e-9:
+            continue
+        d.angle = angle
+        oblique = d.get("oblique_angle", 0.0) or 0.0
+        if oblique and abs(math.sin(math.radians(oblique - angle))) < 1e-9:
+            d.discard("oblique_angle")     # the rotation, stored in its place
+        changed += 1
+    return changed
+
+
+def _drawn_dimension_angle(dim):
+    """The direction (degrees, 0 to 180) of the dimension line a linear
+    dimension's block draws, or None."""
+    import math
+
+    try:
+        block = dim.get_geometry_block()
+        p = dim.dxf.defpoint
+        origins = (dim.dxf.defpoint2, dim.dxf.defpoint3)
+    except Exception:                       # noqa: BLE001 - no usable data
+        return None
+    if block is None:
+        return None
+    ox = oy = 0.0
+    if dim.dxf.hasattr("insert"):           # a moved copy's block offset
+        ox, oy = dim.dxf.insert.x, dim.dxf.insert.y
+    # tight to the dimension's own size, plus what float64 can tell apart
+    # at UTM-sized coordinates (a tolerance from the coordinates alone was
+    # 8 units at 8 000 000 N, wider than the dimension)
+    span = (math.dist(origins[0], origins[1])
+            + math.dist((p.x, p.y), (origins[0].x, origins[0].y)))
+    tol = 1e-6 * max(span, 1e-3) + 1e-9 * max(1.0, abs(p.x), abs(p.y))
+
+    def off_line(q, ax, ay, ux, uy) -> float:
+        return abs((q.x - ax) * uy - (q.y - ay) * ux)
+
+    for line in block:
+        if line.dxftype() != "LINE":
+            continue
+        a, b = line.dxf.start, line.dxf.end
+        ax, ay = a.x + ox, a.y + oy
+        ux, uy = b.x - a.x, b.y - a.y
+        length = math.hypot(ux, uy)
+        if length < tol:
+            continue
+        ux, uy = ux / length, uy / length
+        if off_line(p, ax, ay, ux, uy) > tol:
+            continue
+        if any(off_line(q, ax, ay, ux, uy) <= tol for q in origins):
+            continue                        # an extension line
+        return math.degrees(math.atan2(uy, ux)) % 180.0
+    return None
+
+
 def _mtext_entities(doc):
     """Every MTEXT in the document — model space, layouts and blocks."""
     for layout in doc.layouts:

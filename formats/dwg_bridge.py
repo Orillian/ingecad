@@ -289,8 +289,8 @@ def load_dwg(dwg_path: Path, progress=None):
     """
     from core.document import Document
 
-    from core.encoding import (decode_escapes_in_document, repair_dimstyle_defaults,
-                               repair_invalid_defaults)
+    from core.encoding import (decode_escapes_in_document, repair_dimension_rotation,
+                               repair_dimstyle_defaults, repair_invalid_defaults)
     from core.layouts import repair_missing_main_viewports, repair_viewport_status
 
     dwg_path = Path(dwg_path)
@@ -312,6 +312,9 @@ def load_dwg(dwg_path: Path, progress=None):
     # LibreDWG leaves a DIMSTYLE's zeros implicit; ezdxf would read some of
     # them as its own non-zero defaults (DIMZIN 8 dropped trailing zeros).
     repair_dimstyle_defaults(document.doc)
+    # DWGs IngeCAD saved before 2026-10-28 lost every dimension's rotation
+    # (a LibreDWG import bug, now patched): the block still shows it.
+    repair_dimension_rotation(document.doc)
     # A DWG does not store the DXF viewport status; LibreDWG derives it from
     # entmode and gets it wrong for every layout but the one that was current
     # on save, which left those sheets blank.

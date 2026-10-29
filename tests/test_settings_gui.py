@@ -22,34 +22,6 @@ def win(qapp):
 
 # -- SAVE ----------------------------------------------------------------------
 
-@pytest.fixture
-def clean_settings():
-    """Snapshot and restore every setting the Options dialog writes.
-
-    Apply() saves all four tabs at once, so a test that opens the dialog
-    leaves the template behind even when it never touched it — and the
-    startup window reads that one. Restoring by hand test by test is how
-    the startup test came to fail; this does it in one place.
-    """
-    from PySide6.QtCore import QSettings
-
-    from views.options_dialog import (SETTING_GRID, SETTING_LWT,
-                                      SETTING_RIGHT_CLICK, SETTING_VSYNC)
-    from views.startup_dialog import SETTING_SHOW, SETTING_TEMPLATE
-
-    keys = (SETTING_GRID, SETTING_LWT, SETTING_RIGHT_CLICK, SETTING_VSYNC,
-            SETTING_SHOW, SETTING_TEMPLATE, "osnap/osmode")
-    saved = {k: QSettings().value(k) for k in keys}
-    yield
-    settings = QSettings()
-    for key, value in saved.items():
-        if value is None:
-            settings.remove(key)
-        else:
-            settings.setValue(key, value)
-    settings.sync()
-
-
 def test_save_writes_over_the_open_file_without_asking(win, tmp_path, monkeypatch):
     path = tmp_path / "plano.dxf"
     win.document.save_as(path)

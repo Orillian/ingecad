@@ -149,3 +149,28 @@ def pytest_unconfigure(config):
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(_EXIT_STATUS[0])
+
+
+@pytest.fixture
+def clean_settings():
+    """Snapshot and restore every setting, whatever the test wrote.
+
+    Apply() saves all four tabs at once -- template, MSAA, cursor size,
+    crosshair colour, pickbox, VIEWRES, autosave... -- so a test that opens
+    the dialog leaves all of them behind for the windows after it. A list
+    of keys kept by hand missed some, and one of them hid the axes of the
+    next window on the CI (test_ucs_pixels). The whole store, then: any
+    test that applies the Options dialog takes this fixture.
+    """
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings()
+    saved = {k: settings.value(k) for k in settings.allKeys()}
+    yield
+    settings = QSettings()
+    for key in settings.allKeys():
+        if key not in saved:
+            settings.remove(key)
+    for key, value in saved.items():
+        settings.setValue(key, value)
+    settings.sync()

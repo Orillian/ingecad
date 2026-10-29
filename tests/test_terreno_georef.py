@@ -311,7 +311,8 @@ def test_the_document_hook_says_what_the_drawing_declares():
 
 # -- through the window ------------------------------------------------------------------
 
-def test_the_plugin_is_bundled_on_with_its_menu_names_and_options_page(qapp):
+def test_the_plugin_is_bundled_on_with_its_menu_names_and_options_page(
+        qapp, clean_settings):
     from PySide6.QtCore import QSettings
 
     from plugins.terreno import prefs

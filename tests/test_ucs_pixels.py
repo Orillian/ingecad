@@ -66,9 +66,6 @@ def _red_axis_angle(viewport) -> float:
     return -math.degrees(math.atan(slope))      # screen Y grows downwards
 
 
-@pytest.mark.skipif(bool(__import__("os").environ.get("CI")),
-                    reason="a setting test_settings_gui leaves hides the "
-                           "axes for the next window; to fix after 0.6.8.1")
 def test_the_axes_turn_with_the_ucs(win):
     viewport = win.viewport
     view = viewport.view

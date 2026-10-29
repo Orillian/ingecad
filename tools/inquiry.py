@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 
-from core import ocs
+from core import actions, ocs
 from core.hatch_boundary import boundary_polygon, polygon_area
 from core.i18n import tr
 from core.units import Units
@@ -37,6 +37,53 @@ def _units(tool: Tool) -> Units:
         return getter()
     except Exception:
         return Units()
+
+
+def bulge_polygon(vertices) -> tuple[float, float]:
+    """(area, perimeter) of the closed figure through ``vertices`` --
+    ``(x, y, bulge)``, the bulge for the segment to the next vertex, the
+    last one closing back with a straight line (the classic AREA). Exact:
+    the shoelace plus each arc's circular segment."""
+    n = len(vertices)
+    signed = 0.0
+    perimeter = 0.0
+    for i in range(n):
+        x1, y1, bulge = vertices[i]
+        x2, y2 = vertices[(i + 1) % n][:2]
+        signed += (x1 * y2 - x2 * y1) / 2.0
+        chord = math.hypot(x2 - x1, y2 - y1)
+        if i == n - 1 or not bulge or chord <= 0.0:
+            perimeter += chord
+            continue
+        theta = 4.0 * math.atan(bulge)           # signed sweep, + = CCW
+        radius = chord / (2.0 * math.sin(abs(theta) / 2.0))
+        perimeter += radius * abs(theta)
+        # a CCW arc swells to the right of its chord: outward of a CCW
+        # figure, so its segment adds to the signed area (and the sign
+        # follows the bulge's)
+        segment = radius * radius / 2.0 * (abs(theta) - math.sin(abs(theta)))
+        signed += math.copysign(segment, bulge)
+    return abs(signed), perimeter
+
+
+def _bulge_segments(a: Point, b: Point, bulge: float, n: int = 24) -> list:
+    """The segment a -> b drawn as short lines: straight, or its arc."""
+    if not bulge:
+        return [(a, b)]
+    theta = 4.0 * math.atan(bulge)
+    chord = math.dist(a, b)
+    if chord <= 0.0:
+        return []
+    radius = chord / (2.0 * math.sin(abs(theta) / 2.0))
+    mx, my = (a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0
+    ux, uy = (b[0] - a[0]) / chord, (b[1] - a[1]) / chord
+    # the centre sits left of the chord for a CCW arc under half a turn
+    h = radius * math.cos(theta / 2.0) * (1 if theta > 0 else -1)
+    cx, cy = mx - uy * h, my + ux * h
+    a0 = math.atan2(a[1] - cy, a[0] - cx)
+    pts = [(cx + radius * math.cos(a0 + theta * i / n),
+            cy + radius * math.sin(a0 + theta * i / n)) for i in range(n + 1)]
+    return list(zip(pts, pts[1:]))
 
 
 def _polyline_perimeter(points: list[Point], closed: bool) -> float:
@@ -225,6 +272,9 @@ class AreaTool(Tool):
     def start(self) -> None:
         self.name = "AREA"
         self._points: list[Point] = []
+        self._bulges: list[float] = []   # per segment, to the next point
+        self._arc_mode = False
+        self._await_length = False
         self._mode = "start"        # start | points | object
         self._running = 0.0         # Add/Subtract balance
         self._sign = 0              # 0 = plain, +1 = add mode, -1 = subtract
@@ -247,7 +297,7 @@ class AreaTool(Tool):
         # branches below have always compared against.
         token = self.option(text) or text.strip().upper()
         if self._mode == "points" and self._points:
-            return False        # inside a polygon only points and Enter apply
+            return self._points_option(token, text)
         if token in ("O", "OBJECT"):
             self._mode = "object"
             self.entity_picker = True
@@ -270,6 +320,10 @@ class AreaTool(Tool):
         return False
 
     def on_enter(self) -> None:
+        if self._await_length:
+            self._await_length = False
+            self._ask_next()
+            return
         if self._mode == "points" and len(self._points) >= 3:
             self._finish_polygon()
             return
@@ -308,16 +362,100 @@ class AreaTool(Tool):
             return
 
         self._mode = "points"
+        if self._await_length:
+            return                       # a length is typed, not picked
+        if self._arc_mode and self._points:
+            try:
+                geom = self._tangent_arc(point)
+            except ValueError:
+                self.ctx.echo(tr("Invalid point: the arc would be a line."))
+                self._ask_next()
+                return
+            sweep = (geom[3] - geom[2]) % 360.0
+            bulge = math.tan(math.radians(sweep) / 4.0)
+            self._push(point, bulge if geom[5] else -bulge)
+        else:
+            self._push(point, 0.0)
+        self._ask_next()
+
+    # -- the polygon, as the classic CAD asks for it ---------------------------
+    def _push(self, point: Point, bulge: float) -> None:
+        if self._points:
+            self._bulges.append(bulge)
         self._points.append(point)
         self.last_point = point
-        self.prompt("Specify next point or press Enter for total:")
+
+    def _ask_next(self) -> None:
+        # Total from the third point on, as the classic CAD offers it
+        total = len(self._points) >= 3
+        if self._arc_mode and total:
+            self.prompt("Specify endpoint of arc or [Line/Undo/Total] <Total>:")
+        elif self._arc_mode:
+            self.prompt("Specify endpoint of arc or [Line/Undo]:")
+        elif total:
+            self.prompt("Specify next point or [Arc/Length/Undo/Total] <Total>:")
+        else:
+            self.prompt("Specify next point or [Arc/Length/Undo]:")
+
+    def _direction(self) -> float:
+        """The travel direction at the last point: along the last line, or
+        the tangent at the end of the last arc (0 deg before any segment)."""
+        if len(self._points) < 2:
+            return 0.0
+        a, b = self._points[-2], self._points[-1]
+        chord = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        bulge = self._bulges[-1]
+        return chord + math.degrees(2.0 * math.atan(bulge)) if bulge else chord
+
+    def _tangent_arc(self, point: Point):
+        return actions.arc_sed(self._points[-1], point, self._direction())
+
+    def _points_option(self, token: str, text: str) -> bool:
+        if self._await_length:
+            try:
+                length = float(text)
+            except ValueError:
+                return False
+            self._await_length = False
+            a = math.radians(self._direction())
+            x, y = self._points[-1]
+            self._push((x + length * math.cos(a), y + length * math.sin(a)), 0.0)
+            self._ask_next()
+            return True
+        if token in ("A", "ARC") and not self._arc_mode:
+            self._arc_mode = True
+            self._ask_next()
+            return True
+        if token in ("L", "LINE") and self._arc_mode:
+            self._arc_mode = False
+            self._ask_next()
+            return True
+        if token in ("L", "LENGTH") and not self._arc_mode:
+            self._await_length = True
+            self.prompt("Specify length of line:")
+            return True
+        if token in ("U", "UNDO"):
+            if len(self._points) > 1:
+                self._points.pop()
+                self._bulges.pop()
+                self.last_point = self._points[-1]
+            else:
+                self.ctx.echo(tr("All segments already undone."))
+            self._ask_next()
+            return True
+        if token in ("T", "TOTAL") and len(self._points) >= 3:
+            self._finish_polygon()
+            return True
+        return False
 
     def _finish_polygon(self) -> None:
-        area = polygon_area(self._points)
-        perimeter = _polyline_perimeter(self._points, closed=True)
+        area, perimeter = bulge_polygon(
+            [(x, y, b) for (x, y), b in zip(self._points, self._bulges + [0.0])])
         self._announce(area, perimeter, True)
         self._accumulate(area)
         self._points = []
+        self._bulges = []
+        self._arc_mode = False
         if self._sign:
             self._mode = "start"
             self.prompt(self._root_prompt())
@@ -346,9 +484,21 @@ class AreaTool(Tool):
     def preview_segments(self, cursor: Point):
         if not self._points:
             return []
-        segments = list(zip(self._points, self._points[1:]))
-        segments.append((self._points[-1], cursor))
-        if len(self._points) > 1:
+        segments = []
+        for a, b, bulge in zip(self._points, self._points[1:], self._bulges):
+            segments.extend(_bulge_segments(a, b, bulge))
+        if self._arc_mode:
+            try:
+                geom = self._tangent_arc(cursor)
+                sweep = (geom[3] - geom[2]) % 360.0
+                bulge = math.tan(math.radians(sweep) / 4.0)
+                segments.extend(_bulge_segments(self._points[-1], cursor,
+                                                bulge if geom[5] else -bulge))
+            except ValueError:
+                segments.append((self._points[-1], cursor))
+        elif not self._await_length:
+            segments.append((self._points[-1], cursor))
+        if len(self._points) > 1 and not self._await_length:
             segments.append((cursor, self._points[0]))
         return segments
 

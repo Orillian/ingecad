@@ -75,6 +75,13 @@ def restore_classic() -> None:
         set_background(context, color)
 
 
+def signature() -> tuple[str, ...]:
+    """Every context's background at once: a scene built under one
+    signature is stale under another (#81 -- a drawing kept in a tab came
+    back in the old colours until a REGEN)."""
+    return tuple(background(context) for context in SETTINGS)
+
+
 def rgba(context: str) -> tuple[float, float, float, float]:
     """The background as GL floats, for ``scene.background``."""
     value = background(context)

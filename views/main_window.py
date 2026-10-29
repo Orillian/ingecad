@@ -3992,6 +3992,16 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self.tools._execute(xrefs.SetXrefPathCommand(name, new_path))
         self.xrefs_changed()
 
+    @staticmethod
+    def _scene_key(revision: int) -> tuple:
+        """What a kept scene must still match to be shown again: the
+        drawing's revision and the canvas colours it was resolved against
+        (ACI 7, text masks). A colour change made with the drawing in
+        another tab left it in the old colours until a REGEN (#81)."""
+        from core import window_colors
+
+        return (revision, window_colors.signature())
+
     def regen_in_memory(self, zoom_after: bool = False) -> None:
         """Rebuild the scene in a background thread; adopt when done.
 
@@ -4052,7 +4062,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
                 if (session.document is document and scene is not None
                         and revision == document.revision
                         and layout == session.active_layout):
-                    session.layout_scenes[layout] = (revision, scene)
+                    session.layout_scenes[layout] = (
+                        self._scene_key(revision), scene)
             if self._regen_rerun and self.document is not None:
                 self._start_regen()
             return
@@ -4065,7 +4076,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
             return
         self.viewport.set_scene(scene)
         self.tools.mark_scene_merged()
-        self._layout_scenes[layout] = (revision, scene)
+        self._layout_scenes[layout] = (self._scene_key(revision), scene)
         self._vp_sheet_stale = False          # this bake IS the current view
         if layout != "Model" and getattr(self, "_vp_warm_pending", False):
             # the sheet is up: build the model for navigating its viewports
@@ -5797,7 +5808,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         # space; crossing tabs makes every one of them stale.
         self.tools.space_changed()
         cached = self._layout_scenes.get(name)
-        if (cached is not None and cached[0] == self.document.revision
+        if (cached is not None
+                and cached[0] == self._scene_key(self.document.revision)
                 and self._regen_worker is None):
             # Coming back to a tab already built at this revision: adopt the
             # kept scene instead of re-tessellating the whole drawing (which
@@ -6571,7 +6583,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self.viewport.set_scene(scene)
         # The open built this tab's scene: keep it, so the first switch away
         # and back does not re-tessellate an untouched drawing.
-        self._layout_scenes[self._active_layout] = (document.revision, scene)
+        self._layout_scenes[self._active_layout] = (
+            self._scene_key(document.revision), scene)
         self._layout_cameras = {}
         # where its author left it, as AutoCAD opens a drawing
         self._show_tab_view(self._active_layout)

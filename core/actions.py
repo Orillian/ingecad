@@ -315,7 +315,7 @@ def circle_from_3p(p1, p2, p3) -> tuple[tuple[float, float], float]:
 
 def arc_3p(p1, p2, p3):
     """(center, radius, start_deg, end_deg) of the arc from ``p1`` through
-    ``p2`` to ``p3`` (AutoCAD ARC 3P) -- the arc drawn and the one its
+    ``p2`` to ``p3`` (the classic ARC 3P) -- the arc drawn and the one its
     preview shows. Raises ValueError for collinear points."""
     center, radius = circle_from_3p(p1, p2, p3)
     a1 = math.degrees(math.atan2(p1[1] - center[1], p1[0] - center[0]))
@@ -329,7 +329,7 @@ def arc_3p(p1, p2, p3):
 
 
 def add_arc_3p(p1, p2, p3) -> AddEntityCommand:
-    """Arc from start, a point on the arc, and end (AutoCAD ARC 3P)."""
+    """Arc from start, a point on the arc, and end (the classic ARC 3P)."""
     center, radius, a1, a3 = arc_3p(p1, p2, p3)
     return AddEntityCommand(
         "ARC",
@@ -3174,10 +3174,10 @@ def ellipse_from_axis(p1, p2, other_dist: float):
     center = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
     half = ((p2[0] - p1[0]) / 2.0, (p2[1] - p1[1]) / 2.0)
     if other_dist > math.hypot(*half):
-        # the axes swap; AutoCAD 2026 was not recorded doing this, so the
+        # the axes swap; the classic CAD was not recorded doing this, so the
         # major axis keeps the side it always had
         return _ellipse_normalize(center, half, other_dist)
-    # the major axis points at the FIRST endpoint, as AutoCAD 2026 stores
+    # the major axis points at the FIRST endpoint, as the classic CAD stores
     # it (group C6): an elliptical arc's angle 0 is that endpoint
     return _ellipse_normalize(center, (-half[0], -half[1]), other_dist)
 

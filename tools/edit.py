@@ -161,7 +161,7 @@ class CopyTool(_DisplacementTool):
 
 def _units_text(ctx, value: float, kind: str) -> str:
     """A value as the drawing writes it (LUNITS/LUPREC, AUNITS/AUPREC):
-    AutoCAD's ``<30>`` and ``<1.0000>`` at a default."""
+    The classic ``<30>`` and ``<1.0000>`` at a default."""
     from core import units as units_mod
 
     try:
@@ -169,12 +169,12 @@ def _units_text(ctx, value: float, kind: str) -> str:
         if kind == "angle":
             return units_mod.format_angle(value, u.aunits, u.auprec)
         return units_mod.format_length(value, u.lunits, u.luprec)
-    except Exception:  # noqa: BLE001 -- no drawing units: AutoCAD's default
+    except Exception:  # noqa: BLE001 -- no drawing units: the classic default
         return f"{value:g}" if kind == "angle" else f"{value:.4f}"
 
 
 class RotateTool(Tool):
-    """ROTATE as AutoCAD 2026 asks for it (group E): the angle prompt
+    """ROTATE as the classic CAD asks for it (group E): the angle prompt
     offers the last angle as its default and Enter takes it; Reference asks
     "the reference angle <0>" and "the new angle or [Points] <0>", typed,
     picked or by two points, and remembers new - reference."""
@@ -322,7 +322,7 @@ class RotateTool(Tool):
 
 
 class ScaleTool(Tool):
-    """SCALE as AutoCAD 2026 asks for it (group E): a factor, typed or the
+    """SCALE as the classic CAD asks for it (group E): a factor, typed or the
     distance picked from the base point; Reference asks "reference length
     <1.0000>" (typed, or two points) and "new length or [Points] <1.0000>"
     (typed, picked from the base point, or two points)."""
@@ -631,7 +631,7 @@ class OffsetTool(Tool):
                 return True     # already the behaviour: the side prompt loops
             if self._phase == "side" and self._through \
                     and is_direct_distance(text):
-                # AutoCAD 2026 (group D) refuses a bare number here: the
+                # The classic CAD (group D) refuses a bare number here: the
                 # through point has no base for a direct distance. IngeCAD
                 # took it from LASTPOINT and put the copy somewhere else.
                 self.ctx.echo(tr("Point or option keyword required."))
@@ -1313,7 +1313,7 @@ class FilletTool(Tool):
         try:
             u = services.units()
             return units_mod.format_length(value, u.lunits, u.luprec)
-        except Exception:  # noqa: BLE001 -- no drawing units: AutoCAD's default
+        except Exception:  # noqa: BLE001 -- no drawing units: the classic default
             return f"{value:.4f}"
 
     def _announce(self) -> None:
@@ -1385,7 +1385,7 @@ class FilletTool(Tool):
             return True
         if t in ("R", "RADIUS") and (self._first is not None
                                      or self._await == "polyline"):
-            # AutoCAD 2026 (group D) offers Radius at the second object and
+            # The classic CAD (group D) offers Radius at the second object and
             # at the polyline too, and comes back to that same prompt
             self._resume_to = "second" if self._first is not None else "polyline"
             self._await = "radius"

@@ -342,7 +342,7 @@ class ChamferTool(Tool):
             self._resume()
             return True
         if self._first is not None or self._await == "polyline":
-            # AutoCAD 2026 (group D): the second line, and the polyline,
+            # The classic CAD (group D): the second line, and the polyline,
             # offer [Distance/Angle/Method] and come back to that prompt
             self._resume_to = "second" if self._first is not None else "polyline"
             if token in ("D", "DISTANCE"):

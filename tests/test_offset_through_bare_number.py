@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
-"""OFFSET Through refuses a bare number, as AutoCAD 2026 did (group D):
+"""OFFSET Through refuses a bare number, as the classic CAD does (group D):
 "Specify through point ... : 50" answers "Point or option keyword
 required." and asks again. IngeCAD took 50 as a distance from LASTPOINT
 and put the copy somewhere else."""

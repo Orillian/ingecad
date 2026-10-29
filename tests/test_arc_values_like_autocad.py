@@ -97,7 +97,7 @@ def test_a_clicked_angle_after_the_end_is_measured_from_the_start(win):
 
 def test_the_three_point_preview_is_the_arc_not_the_circle(win):
     """ARC 3P showed the whole circle through the three points while the
-    end was sought (Marco: "me sale todo el tiempo un círculo"); AutoCAD
+    end was sought (Marco: "me sale todo el tiempo un círculo"); the classic CAD
     shows the arc that will be drawn, and so does IngeCAD now."""
     _type(win, "ARC", "0,0", "50,50")
     cursor = (100, 0)

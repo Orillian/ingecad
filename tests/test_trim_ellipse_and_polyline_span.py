@@ -59,7 +59,7 @@ def test_the_ellipse_trims_inside_the_rectangle(win):
     (e,) = win.document.modelspace().query("ELLIPSE")
     # what is left is the part outside: from one crossing of x = 20 round
     # the far end to the other, through (34, -2) -- the parameter pi: the
-    # major axis points at the first axis endpoint, as AutoCAD stores it
+    # major axis points at the first axis endpoint, as the classic CAD stores it
     cross = math.acos(-5 / 9)
     assert (e.dxf.start_param, e.dxf.end_param) == pytest.approx(
         (math.pi - cross, math.pi + cross), abs=1e-6)

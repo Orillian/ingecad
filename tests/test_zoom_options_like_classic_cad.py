@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
-"""ZOOM takes what AutoCAD 2026 took in the side-by-side session (group H).
+"""ZOOM takes what the classic CAD takes in the side-by-side session (group H).
 
 ``ZOOM C 150,30 250`` answered "Unknown ZOOM option", and the centre and
-height then ran as commands ("Unknown command "150,50""). AutoCAD also
+height then ran as commands ("Unknown command "150,50""). The classic CAD also
 takes ``2X``, a bare scale, All, Scale and a typed first window corner.
 """
 from __future__ import annotations

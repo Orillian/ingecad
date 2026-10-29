@@ -278,7 +278,7 @@ def _lineweight_name(value: int) -> str:
 
 
 
-#: ZOOM's prompt in the Model tab and on a sheet (AutoCAD 2026, group H,
+#: ZOOM's prompt in the Model tab and on a sheet (classic CAD, group H,
 #: without Dynamic and Object; Enter is Extents, the wheel zooms anytime).
 ZOOM_PROMPT = ("Specify corner of window, enter a scale factor (nX or nXP), or "
                "[All/Center/Extents/Previous/Scale/Window] <Extents>:")
@@ -5495,7 +5495,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
 
     def _zoom_typed(self, option: str) -> bool:
         """What ZOOM takes besides a keyword in the Model tab or on a sheet,
-        as AutoCAD 2026 does: ``2X`` (of the current view), a bare ``2``
+        as the classic CAD does: ``2X`` (of the current view), a bare ``2``
         (of the whole drawing), or a typed first corner of a window."""
         from core.coords import CoordinateError, parse_point
         from tools.zoom_window import parse_times

@@ -1069,7 +1069,7 @@ def test_text_rubber_band_from_the_start_point_while_asking():
 
 
 def test_an_elliptical_arc_starts_at_the_first_axis_endpoint():
-    """AutoCAD 2026, group C6: ELLIPSE _A 300,400 400,400 25, start 0, end
+    """Classic CAD, group C6: ELLIPSE _A 300,400 400,400 25, start 0, end
     270 starts at (300,400) and ends at (350,425); IngeCAD drew it
     mirrored, from (400,400) to (350,375)."""
     from PySide6.QtWidgets import QApplication

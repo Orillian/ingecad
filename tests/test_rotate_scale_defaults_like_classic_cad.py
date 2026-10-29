@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
-"""ROTATE and SCALE answer as AutoCAD 2026 did (group E of the session).
+"""ROTATE and SCALE answer as the classic CAD does (group E of the session).
 
 ROTATE offers the last angle as its default (``<30>``) and Enter takes
 it; Reference asks "the reference angle <0>" and "the new angle or
@@ -72,7 +72,7 @@ def test_rotate_reference_with_defaults_and_points(win):
     assert _last_prompt(win).endswith(f"Specify the reference angle <{_a(win, 0)}>:")
     _type(win, "30")
     assert _last_prompt(win).endswith(f"Specify the new angle or [Points] <{_a(win, 0)}>:")
-    _type(win, "90")                          # turns by 60, as AutoCAD
+    _type(win, "90")                          # turns by 60, as the classic CAD
     assert _end(win) == pytest.approx((50, 86.6025404))
     _type(win, "ROTATE", "ALL", "", "0,0")
     assert _last_prompt(win).endswith(f"<{_a(win, 60)}>:")

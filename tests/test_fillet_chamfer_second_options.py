@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
 """FILLET and CHAMFER offer their settings at the second object too, as
-AutoCAD 2026 did (group D): "Select second object or shift-select to
+the classic CAD does (group D): "Select second object or shift-select to
 apply corner or [Radius]:" and "Select second line ... or
 [Distance/Angle/Method]:", back to that same prompt after the value. The
 polyline prompt offers them as well. IngeCAD offered nothing there."""

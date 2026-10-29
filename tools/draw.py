@@ -668,7 +668,7 @@ class ArcTool(Tool):
         try:
             if state == "THIRD":
                 # the arc that will be drawn, start through the second point
-                # to the cursor, as AutoCAD shows it -- not the whole circle
+                # to the cursor, as the classic CAD shows it -- not the whole circle
                 try:
                     return _arc_preview(actions.arc_3p(
                         self._start, self._second, cursor))

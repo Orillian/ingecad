@@ -16,7 +16,7 @@ from typing import Optional
 
 from tools.base import Point, Tool
 
-#: ``2X``: a factor of the current view, as AutoCAD's ZOOM reads it.
+#: ``2X``: a factor of the current view, as the classic ZOOM reads it.
 _TIMES = re.compile(r"^\s*([0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\s*[xX]\s*$")
 
 
@@ -66,7 +66,7 @@ class ZoomWindowTool(Tool):
 
 
 class ZoomCenterTool(Tool):
-    """ZOOM Center as AutoCAD 2026 asks for it (group H): "Specify center
+    """ZOOM Center as the classic CAD asks for it (group H): "Specify center
     point:", then "Enter magnification or height <current>:" -- a height
     in drawing units, or ``nX`` of the current view; Enter keeps it."""
 

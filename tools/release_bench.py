@@ -19,8 +19,9 @@ What is measured, each timed until the screen settles, and the freeze as
 the longest gap in a 10 ms event-loop timer (with main()'s switch
 interval: without it a worker thread starves the GUI and the numbers lie):
 open, a full regen, zoom/pan frames (forced with grabFramebuffer), hover
-with LINE running, crossing selection, colour change, Ctrl+C/X/V, ERASE,
-COPY, MOVE -- each undone -- and Save as DWG.
+with LINE running, crossing selection, colour change, Ctrl+C/X/V, ERASE
+of everything and of a thousand objects, COPY, MOVE -- each undone -- and
+Save as DWG.
 
 Needs a display: DISPLAY=:0 QT_QPA_PLATFORM=xcb (offscreen does not paint).
 Keep TMPDIR on disk (/tmp is RAM): the DWG round trips are large.
@@ -46,7 +47,8 @@ ACTIONS = [
     ("open", "open"), ("regen", "full regen"),
     ("select", "crossing selection"), ("color", "colour change"),
     ("undo_color", "  undo"), ("copyclip", "Ctrl+C"), ("erase", "ERASE"),
-    ("undo_erase", "  undo"), ("paste", "Ctrl+V"), ("undo_paste", "  undo"),
+    ("undo_erase", "  undo"), ("erase_part", "ERASE 1000"),
+    ("undo_erase_part", "  undo"), ("paste", "Ctrl+V"), ("undo_paste", "  undo"),
     ("cut", "Ctrl+X"), ("undo_cut", "  undo"), ("copy", "COPY"),
     ("undo_copy", "  undo"), ("move", "MOVE"), ("undo_move", "  undo"),
     ("save_dwg", "Save as DWG"),
@@ -55,6 +57,7 @@ FREEZE_LIMIT = 1.0          # seconds the GUI may not answer
 PAINT_LIMIT = 0.3           # an empty paint slower than this: a paced display
 SLOWER = 1.25               # ...and how much slower than the base is a flag
 SLOWER_ABS = 0.2
+PART = 1000                 # objects in the "ERASE 1000" row
 
 
 # -- one plan, one tree: runs INSIDE the tree being measured ------------------------
@@ -208,6 +211,19 @@ def run_one(src: Path, out: Path, tree: str) -> dict:
     timed("copyclip", win._cmd_copy)
     timed("erase", lambda: win._on_command_submitted("ERASE"))
     timed("undo_erase", win._cmd_undo)
+
+    def erase_part():
+        # a thousand objects, not the whole plan: the middle size the
+        # bench missed until 2026-10-28, when its undo froze Plaza Yanque
+        # 2.3 s -- six big block references among them, counted as six
+        # objects and re-drawn on the GUI thread. Erasing everything goes
+        # to the background regen and was always fine.
+        crossing()
+        tc.selection = set(sorted(tc.selection)[:PART])
+        win._on_command_submitted("ERASE")
+
+    timed("erase_part", erase_part)
+    timed("undo_erase_part", win._cmd_undo)
 
     def paste():
         win._cmd_paste()

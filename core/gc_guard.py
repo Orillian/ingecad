@@ -80,11 +80,29 @@ def paused():
             _enable_on_gui_thread()
 
 
+#: Allocations piled up during a pause past which the collection runs
+#: right away, as the background work lands, instead of inside whatever
+#: the user does next.
+BACKLOG = 50000
+
+
 def _enable_now() -> None:
-    """Switch the collector back on -- unless a worker started meanwhile."""
+    """Switch the collector back on -- unless a worker started meanwhile.
+
+    A regen and a cache warmer back to back (a big undo) pile some 330 000
+    objects of garbage on a 10 000-entity plan; the first collection
+    after them took 0.5 s and landed in the next Ctrl+X, which froze 0.9 s
+    instead of 0.3 (release bench, 2026-10-28). Collected here it lands
+    with the drawing the workers just delivered. Below the backlog it is
+    left to the collector's own rhythm: a full pass costs 0.2 s even when
+    there is little to free."""
     with _lock:
-        if _paused == 0:
-            gc.enable()
+        if _paused != 0:
+            return
+        gc.enable()
+        backlog = gc.get_count()[0]
+    if backlog > BACKLOG:
+        gc.collect()
 
 
 def _enable_on_gui_thread() -> None:

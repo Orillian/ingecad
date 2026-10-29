@@ -34,6 +34,35 @@ def test_paused_switches_the_collector_off_while_any_worker_runs():
     assert gc.isenabled() and gc_guard.pauses() == 0     # restored on the way out
 
 
+def test_a_big_backlog_is_collected_as_the_pause_ends(monkeypatch):
+    """A regen and a warmer back to back piled 330 000 objects of garbage;
+    the late collection froze the next Ctrl+X. Past the backlog it runs
+    as the pause ends (here, no application: on this thread)."""
+    import weakref
+
+    class Node:
+        pass
+
+    def cyclic(n):
+        first = None
+        for _ in range(n):
+            a, b = Node(), Node()
+            a.other, b.other = b, a          # garbage only a collection frees
+            first = first or weakref.ref(a)
+        return first
+
+    monkeypatch.setattr(gc_guard, "BACKLOG", 5000)
+    gc.collect()
+    with gc_guard.paused():
+        big = cyclic(10000)
+    assert big() is None                  # collected on the way out
+    gc.collect()
+    with gc_guard.paused():
+        small = cyclic(100)
+    assert small() is not None            # a small pause: left for later
+    gc.collect()
+
+
 class _Finalized:
     seen: list = []
 

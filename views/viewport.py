@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QMatrix4x4,
@@ -2505,6 +2505,36 @@ class Viewport(QOpenGLWidget):
                     return
             self.view.zoom_at(pos.x(), pos.y(), wheel_step() ** notches)
             self.update()
+
+    def enterEvent(self, event) -> None:
+        """The pointer came in -- or was already there when the window, or
+        the start-up dialog over it, went away: the crosshair shows NOW.
+        The canvas hides the system arrow, and the crosshair waited for the
+        first move, so a still mouse had no cursor at all (Marco: "cuando
+        abres IngeCAD por primera vez el cursor se pierde")."""
+        self._adopt_pointer(event.position())
+        super().enterEvent(event)
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.WindowActivate and self._cursor is None:
+            from PySide6.QtGui import QCursor
+
+            local = self.mapFromGlobal(QCursor.pos())
+            if self.rect().contains(local):
+                self._adopt_pointer(QPointF(local))
+        return super().event(event)
+
+    def _adopt_pointer(self, pos) -> None:
+        """Take ``pos`` as the crosshair's place, as a move to it would."""
+        if self._pan_mode or self._panning:
+            return
+        self._cursor = pos
+        wx, wy = self.view.screen_to_world(pos.x(), pos.y())
+        self.sync_cursor_shape(wx, wy)
+        if self.tool_delegate is not None:
+            self.tool_delegate.on_hover(wx, wy)
+        self.cursorMoved.emit(wx, wy)
+        self.update()
 
     def leaveEvent(self, event) -> None:
         self._cursor = None

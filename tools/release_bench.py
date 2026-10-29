@@ -58,6 +58,7 @@ PAINT_LIMIT = 0.3           # an empty paint slower than this: a paced display
 SLOWER = 1.25               # ...and how much slower than the base is a flag
 SLOWER_ABS = 0.2
 PART = 1000                 # objects in the "ERASE 1000" row
+THINK = 0.5                 # seconds a person looks before acting again
 
 
 # -- one plan, one tree: runs INSIDE the tree being measured ------------------------
@@ -137,6 +138,14 @@ def run_one(src: Path, out: Path, tree: str) -> dict:
             # empty paint after each action says whether this sample counts.
             if empty_paint() > PAINT_LIMIT:
                 res[key]["paced"] = True
+            # a person looks at the result before the next action: work
+            # left for a still moment (gc_guard's backlog) runs here, and a
+            # freeze in it counts all the same -- the crosshair stops
+            gap["last"], gap["worst"] = time.monotonic(), 0.0
+            end = time.monotonic() + THINK
+            while time.monotonic() < end:
+                app.processEvents()
+            res[key]["freeze"] = max(res[key]["freeze"], round(gap["worst"], 2))
         except Exception as exc:  # noqa: BLE001 - a failure IS a result
             res[key] = f"FAIL {type(exc).__name__}: {str(exc)[:80]}"
             settle()

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6.9.1 — 2026-10-29
+
+- **TRIM cuts a polyline along itself, from crossing to crossing**: the
+  side of a rectangle inside a circle goes with the whole run up to the
+  next crossing, over its corners, instead of stopping at the corner.
+- **TRIM trims ellipses and elliptical arcs.**
+- **A selected ellipse or spline is highlighted on the curve at any zoom**,
+  no longer as a polygon beside it.
+- **A right click (or Ctrl+J) with a command typed runs that command**,
+  instead of repeating the last one (#110).
+
 ## v0.6.9 — 2026-10-29
 
 An assistant that draws with the same commands you type, off until you

@@ -358,10 +358,18 @@ def jog_points(center: Point, p: Point, override: Point, jog: Point,
     s_a = min(s_j + d / 2.0, hi)
     s_b = s_a - d
     if s_b < s_o:
+        # the jog would start behind the override: it starts there, and
+        # when even then it overshoots the arc (or the text) it steepens
+        # over half the room -- an override far to the side, a centre far
+        # off the sheet -- and the arrow keeps its stretch of true radius
         s_b, s_a = s_o, s_o + d
-    return [override,
-            (cx + ux * s_b + nx * h, cy + uy * s_b + ny * h),
-            (cx + ux * s_a, cy + uy * s_a), p]
+        if s_a > hi:
+            s_a = s_o + max(hi - s_o, 0.0) / 2.0
+    b = (cx + ux * s_b + nx * h, cy + uy * s_b + ny * h)
+    a = (cx + ux * s_a, cy + uy * s_a)
+    if math.hypot(b[0] - override[0], b[1] - override[1]) <= 1e-9 * r:
+        return [override, a, p]
+    return [override, b, a, p]
 
 
 def jog_data(dim) -> Optional[tuple[Point, Point]]:
@@ -390,6 +398,31 @@ def _jog_angle(get) -> float:
     return math.degrees(value) if value <= math.pi / 2 + 1e-9 else value
 
 
+def _center_mark_lines(renderer, c, r) -> list:
+    """The segments ezdxf's ``add_center_mark`` draws at ``c``: a cross
+    of DIMCEN, and centre lines out past the arc when DIMCEN is negative."""
+    dimcen = float(renderer.dim_style.get("dimcen", 0) or 0)
+    size = abs(dimcen)
+    if size == 0:
+        return []
+    out = [((c.x - size, c.y), (c.x + size, c.y)),
+           ((c.x, c.y - size), (c.x, c.y + size))]
+    if dimcen < 0 and size + r >= 2 * size:
+        far = size + r
+        for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            out.append(((c.x + sx * 2 * size, c.y + sy * 2 * size),
+                        (c.x + sx * far, c.y + sy * far)))
+    return out
+
+
+def _same_segment(a, b, seg, eps) -> bool:
+    (x0, y0), (x1, y1) = seg
+    def at(q, x, y):
+        return abs(q.x - x) <= eps and abs(q.y - y) <= eps
+    return ((at(a, x0, y0) and at(b, x1, y1))
+            or (at(a, x1, y1) and at(b, x0, y0)))
+
+
 def draw_jog(renderer, block) -> None:
     """Redraw a jogged radius's dimension line into its freshly rendered
     block: ezdxf drew a plain radius to the true centre (a centre mark
@@ -413,10 +446,16 @@ def draw_jog(renderer, block) -> None:
         if s_text < r:              # the text sits on the arrow's segment
             limit = s_text - renderer.total_text_width() / 2.0
     attribs = None
+    marks = _center_mark_lines(renderer, c, r)
     for line in list(block):
         if line.dxftype() != "LINE" or line.dxf.layer.lower() == "defpoints":
             continue
         a, b = line.dxf.start, line.dxf.end
+        if any(_same_segment(a, b, m, eps) for m in marks):
+            # the centre a jogged radius stands in for is off the sheet:
+            # no mark there (it stretched ZOOM Extents to it)
+            block.delete_entity(line)
+            continue
         perp = [abs((q.x - c.x) * -uy + (q.y - c.y) * ux) for q in (a, b)]
         inside = all(math.hypot(q.x - c.x, q.y - c.y) <= r + eps for q in (a, b))
         if not (inside or max(perp) <= eps):

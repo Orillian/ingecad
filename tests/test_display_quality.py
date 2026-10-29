@@ -84,6 +84,10 @@ def test_the_line_smoothing_setting_reaches_the_surface_format(samples):
 
     settings = QSettings()
     previous = settings.value("display/msaa", None)
+    # the format the process runs with, not the one the settings would
+    # give: configured again here, every later window drew with smoothing
+    # and test_ucs_pixels found its one-pixel axis in another colour
+    original = QSurfaceFormat.defaultFormat()
     try:
         settings.setValue("display/msaa", samples)
         ingecad_main._configure_surface_format()
@@ -93,7 +97,7 @@ def test_the_line_smoothing_setting_reaches_the_surface_format(samples):
             settings.remove("display/msaa")
         else:
             settings.setValue("display/msaa", previous)
-        ingecad_main._configure_surface_format()
+        QSurfaceFormat.setDefaultFormat(original)
 
 
 def test_the_display_settings_are_read_under_the_application_name():

@@ -11,6 +11,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from core.surveying import format_station  # noqa: F401  (re-exported)
+
 Point = tuple[float, float]
 
 
@@ -32,11 +34,6 @@ class Station:
         """The point ``offset`` metres to the right (+) or left (-)."""
         nx, ny = self.normal
         return (self.x - nx * offset, self.y - ny * offset)
-
-
-def format_station(s: float, decimals: int = 2) -> str:
-    km, m = divmod(round(s, decimals), 1000.0)
-    return f"{int(km)}+{m:0{4 + decimals}.{decimals}f}"
 
 
 def polyline_length(points: list[Point]) -> float:

@@ -1,0 +1,18 @@
+{
+  "_": "Spanish command names of the roads plugin. The English names always keep working.",
+  "ROADAXIS": {
+    "name": "EJEVIA"
+  },
+  "STATIONING": {
+    "name": "ESTACAR"
+  },
+  "RESTATION": {
+    "name": "REESTACAR"
+  },
+  "AXISREVERSE": {
+    "name": "INVERTIREJE"
+  },
+  "AXISTABLE": {
+    "name": "CUADROEJE"
+  }
+}

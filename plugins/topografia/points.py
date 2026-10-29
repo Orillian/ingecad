@@ -19,6 +19,10 @@ import math
 import re
 from dataclasses import dataclass
 
+# the formats Roads prints too live in the core, once (re-exported here)
+from core.surveying import (azimuth_to_cad, cad_to_azimuth,  # noqa: F401
+                            format_bearing, format_dms)
+
 #: Column orders offered by the import; ``N`` northing, ``E`` easting.
 ORDERS = ("PNEZD", "PENZD", "NEZD", "ENZD", "PNEZ", "PENZ", "NEZ", "ENZ")
 
@@ -205,36 +209,6 @@ def parse_bearing(text: str) -> float:
             az = 180.0 - angle if ew == "E" else 180.0 + angle
         return az % 360.0
     return parse_dms(text) % 360.0
-
-
-def format_bearing(azimuth: float, seconds: bool = True) -> str:
-    """An azimuth as the quadrant bearing surveyors read: ``N 45°30'20" E``."""
-    az = azimuth % 360.0
-    if az <= 90.0:
-        ns, ew, angle = "N", "E", az
-    elif az <= 180.0:
-        ns, ew, angle = "S", "E", 180.0 - az
-    elif az < 270.0:
-        ns, ew, angle = "S", "W", az - 180.0
-    else:
-        ns, ew, angle = "N", "W", 360.0 - az
-    return f"{ns} {format_dms(angle, seconds)} {ew}"
-
-
-def format_dms(degrees: float, seconds: bool = True) -> str:
-    total = round(degrees * 3600.0) if seconds else round(degrees * 60.0) * 60
-    d, rest = divmod(int(total), 3600)
-    m, s = divmod(rest, 60)
-    return f"{d}°{m:02d}'{s:02d}\"" if seconds else f"{d}°{m:02d}'"
-
-
-def azimuth_to_cad(azimuth: float) -> float:
-    """Azimuth (from north, clockwise) -> CAD angle (from east, CCW)."""
-    return (90.0 - azimuth) % 360.0
-
-
-def cad_to_azimuth(angle: float) -> float:
-    return (90.0 - angle) % 360.0
 
 
 def point_from_bearing(base, azimuth: float, distance: float) -> tuple[float, float]:

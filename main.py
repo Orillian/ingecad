@@ -245,6 +245,11 @@ def main() -> int:
     # for a barely measurable regen slowdown.
     if "--check" in sys.argv[1:]:
         return _self_check()
+    if "--mcp" in sys.argv[1:]:
+        # an MCP client started us: stdio is the protocol, no window
+        from core.ai.mcp_server import main as mcp_main
+
+        return mcp_main()
     sys.setswitchinterval(0.001)
     # Name the application BEFORE anything reads QSettings. The surface
     # format has to be fixed before QApplication exists, and it reads the

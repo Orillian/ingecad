@@ -2154,5 +2154,11 @@
   "Assistant": "Asistente",
   "The AI assistant is off. Turn it on in Options > AI Assistant.": "El asistente de IA está apagado. Actívelo en Opciones > Asistente de IA.",
   "Ollama (local)": "Ollama (local)",
-  "Custom (OpenAI-compatible)": "Personalizado (compatible con OpenAI)"
+  "Custom (OpenAI-compatible)": "Personalizado (compatible con OpenAI)",
+  "Another IngeCAD window already serves the MCP bridge.": "Otra ventana de IngeCAD ya sirve el puente MCP.",
+  "MCP bridge on.": "Puente MCP encendido.",
+  "MCP bridge off.": "Puente MCP apagado.",
+  "Serve the drawing to MCP clients (MCPSTART / MCPSTOP)": "Servir el dibujo a clientes MCP (MCPSTART / MCPSTOP)",
+  "Lets an AI program on this computer (Claude Desktop, Claude Code and others) work on the open drawing, through a local socket only you can use. Add IngeCAD to the program with this configuration:": "Permite que un programa de IA de esta computadora (Claude Desktop, Claude Code y otros) trabaje sobre el dibujo abierto, por un socket local que sólo usted puede usar. Agregue IngeCAD al programa con esta configuración:",
+  "Copy configuration": "Copiar configuración"
 }

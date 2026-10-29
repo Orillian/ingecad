@@ -3753,7 +3753,9 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         tabs.addTab(self._xrefs_panel, tr("Xrefs"))
         self._sidebar_tabs = tabs
         self._assistant_panel = None
+        self._mcp_bridge = None
         self.sync_assistant()
+        self.sync_mcp()
 
         dock = QDockWidget(self)
         dock.setObjectName("sidebar_dock")
@@ -3902,6 +3904,43 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
             panel.shutdown()
             panel.deleteLater()
             self._assistant_panel = None
+
+    def sync_mcp(self, announce: bool = False) -> None:
+        """Serve the MCP bridge or not, as the setting says. Only one
+        window of the user serves it; another one stays quiet."""
+        from views import ai_panel
+
+        bridge = self._mcp_bridge
+        if ai_panel.mcp_enabled():
+            if bridge is None:
+                from core.ai.bridge import Bridge
+
+                bridge = Bridge(self)
+                if not bridge.listen():
+                    bridge.deleteLater()
+                    if announce:
+                        self.command_line.echo(tr(
+                            "Another IngeCAD window already serves the MCP "
+                            "bridge."))
+                    return
+                self._mcp_bridge = bridge
+            if announce:
+                self.command_line.echo(tr("MCP bridge on."))
+        elif bridge is not None:
+            bridge.close()
+            bridge.deleteLater()
+            self._mcp_bridge = None
+            if announce:
+                self.command_line.echo(tr("MCP bridge off."))
+        elif announce:
+            self.command_line.echo(tr("MCP bridge off."))
+
+    def _cmd_mcp(self, on: bool) -> None:
+        """MCPSTART / MCPSTOP: the same switch as Options, remembered."""
+        from views import ai_panel
+
+        QSettings().setValue(ai_panel.SETTING_MCP, on)
+        self.sync_mcp(announce=True)
 
     def open_assistant(self, *args) -> None:
         """AI: the Assistant tab -- or, while it is off, where to turn it on."""
@@ -4300,6 +4339,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         d.register("BATTMAN", lambda *a: self._cmd_battman())
         # external references (#33): the palette, its command-line twin
         d.register("AI", self.open_assistant)
+        d.register("MCPSTART", lambda *a: self._cmd_mcp(True))
+        d.register("MCPSTOP", lambda *a: self._cmd_mcp(False))
         d.register("XREF", lambda *a: self.toggle_xrefs_panel())
         d.register("EXTERNALREFERENCES", lambda *a: self.toggle_xrefs_panel())
         d.register("-XREF", self._cmd_xref_cli)
@@ -6390,6 +6431,10 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         assistant = getattr(self, "_assistant_panel", None)
         if assistant is not None:
             assistant.shutdown()
+        bridge = getattr(self, "_mcp_bridge", None)
+        if bridge is not None:
+            bridge.close()
+            self._mcp_bridge = None
         live = getattr(self, "_vp_live_worker", None)
         if live is not None:
             try:

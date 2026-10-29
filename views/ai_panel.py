@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
-"""The AI assistant: a tab of the right sidebar, and its Options page.
+"""The AI assistant: a tab of the right sidebar, and its Options page
+(which also switches the MCP bridge, core/ai/bridge.py).
 
 Off by default. While it is off there is no tab, and nothing of core.ai is
 imported (a test watches that): the window reads one setting.
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
 from core.i18n import tr
 
 SETTING_ON = "ai/assistant"
+SETTING_MCP = "ai/mcp"
 SETTING_PROVIDER = "ai/provider"
 SETTING_MODEL = "ai/model"
 SETTING_BASE_URL = "ai/base_url"
@@ -47,6 +49,10 @@ def _flag(key: str, default: bool = False) -> bool:
 
 def enabled() -> bool:
     return _flag(SETTING_ON)
+
+
+def mcp_enabled() -> bool:
+    return _flag(SETTING_MCP)
 
 
 def current_provider():
@@ -343,6 +349,20 @@ class AiOptionsPage(QWidget):
         self.key_note = QLabel(self)
         self.key_note.setWordWrap(True)
         form.addRow(self.key_note)
+        self.mcp_on = QCheckBox(tr("Serve the drawing to MCP clients "
+                                   "(MCPSTART / MCPSTOP)"), self)
+        self.mcp_on.setChecked(mcp_enabled())
+        form.addRow(self.mcp_on)
+        mcp_note = QLabel(tr("Lets an AI program on this computer (Claude "
+                             "Desktop, Claude Code and others) work on the "
+                             "open drawing, through a local socket only "
+                             "you can use. Add IngeCAD to the program with "
+                             "this configuration:"), self)
+        mcp_note.setWordWrap(True)
+        form.addRow(mcp_note)
+        self.copy_config = QPushButton(tr("Copy configuration"), self)
+        self.copy_config.clicked.connect(self._copy_config)
+        form.addRow(self.copy_config)
         self._provider_changed()
 
     def _selected(self):
@@ -383,6 +403,14 @@ class AiOptionsPage(QWidget):
             tr("The system keyring is not available: the key was saved in a "
                "file only you can read."))
 
+    def _copy_config(self) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        from core.ai.mcp_server import client_config
+
+        QApplication.clipboard().setText(client_config())
+        self.window.command_line.echo(tr("Copied to clipboard."))
+
     def _forget_key(self) -> None:
         from core.ai import secrets
 
@@ -394,11 +422,13 @@ class AiOptionsPage(QWidget):
         settings = QSettings()
         p = self._selected()
         settings.setValue(SETTING_ON, self.assistant_on.isChecked())
+        settings.setValue(SETTING_MCP, self.mcp_on.isChecked())
         settings.setValue(SETTING_PROVIDER, p.id)
         settings.setValue(SETTING_MODEL, self.model.text().strip())
         settings.setValue(SETTING_BASE_URL, self.base_url.text().strip())
         if self.key.text().strip():
             self._save_key()
-        sync = getattr(self.window, "sync_assistant", None)
-        if sync is not None:
-            sync()
+        for name in ("sync_assistant", "sync_mcp"):
+            sync = getattr(self.window, name, None)
+            if sync is not None:
+                sync()

@@ -3,6 +3,26 @@
 IngeCAD embeds LibreDWG's `dwg2dxf`/`dxf2dwg` as satellite converters
 (`vendor/libredwg/bin`, gitignored).
 
+## 2026-10-29: layer groups keep their layers in the DWG
+
+Appended to `current/ingecad-vendor-0.14.8597.patch`. Found while adding
+layer groups (AutoCAD's layer filters) to the Layers tab: a plan saved as
+DWG kept its groups, but every group came back empty.
+
+- **`in_dxf.c` dropped every 330 of an XRECORD after its owner.** The
+  `case 330` branch knows reactors, the owner and a few typed fields
+  (SORTENTSTABLE, LAYOUT, FIELDLIST); any other 330 ended in its `break`
+  without a trace. An XRECORD's 340/350/360 already fall through to
+  `add_xdata`, so only 330 was lost -- and 330 is how AutoCAD's
+  `AcLyLayerGroup` records (in `ACLYDICTIONARY` under the layer table)
+  list their layers. A 330 met inside `AcDbXrecord` is now data; the
+  owner's 330, read before the subclass marker, is still the owner.
+
+ODA as the judge: an AutoCAD 2018 drawing with a group of two layers and
+a nested one, opened and saved as DWG, read in ODA with the group empty
+before and `330 2D2 / 330 2D0` after. `make check` 270/0; `dwg_fuzz`
+500 seeds identical, seed by seed. Upstream: not reported yet.
+
 ## 2026-10-28: a vertical or rotated dimension keeps its rotation in the DWG
 
 Appended to `current/ingecad-vendor-0.14.8597.patch`. Found through a user

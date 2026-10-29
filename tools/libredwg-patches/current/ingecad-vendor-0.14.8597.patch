@@ -2880,3 +2880,18 @@ diff --git a/src/in_dxf.c b/src/in_dxf.c
                    else if (strEQc (subclass, "AcDbAlignedDimension"))
                      {
                        // could be DIMENSION_LINEAR also. changed later on those
+diff --git a/src/in_dxf.c b/src/in_dxf.c
+--- a/src/in_dxf.c
++++ b/src/in_dxf.c
+@@ -11273,6 +11273,11 @@
+               LOG_TRACE ("%s.ownerhandle = " FORMAT_REF " [H 330]\n", name,
+                          ARGS_REF (owh));
+             }
++          // a 330 after the owner is data: AutoCAD's layer groups list
++          // their layers this way (AcLyLayerGroup in ACLYDICTIONARY)
++          else if (pair->code == 330 && obj->fixedtype == DWG_TYPE_XRECORD
++                   && strEQc (subclass, "AcDbXrecord"))
++            pair = add_xdata (dat, obj, pair);
+           break;
+         case 350: // DICTIONARY softhandle
+         case 360: // {ACAD_XDICTIONARY or some hardowner

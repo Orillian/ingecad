@@ -3507,15 +3507,17 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
 
     def _tables_key(self):
         """What the layer-driven controls show, as a value: the layers with
-        their colours and the linetypes. Same content, same key -- so a
+        their colours, the linetypes and the layer filters. Same content, same key -- so a
         refresh keyed on it costs nothing until a table really changes."""
+        from core import layer_filters
         from core import layers as layer_ops
 
         if self.document is None:
             return None
         return (id(self.document),
                 tuple(layer_ops.layer_names_and_colors(self.document)),
-                tuple(layer_ops.available_linetypes(self.document)))
+                tuple(layer_ops.available_linetypes(self.document)),
+                layer_filters.filters_key(self.document))
 
     def _refresh_layers_panel_if_tables_changed(self) -> None:
         """A command that creates or drops a layer (a plugin's grid on its

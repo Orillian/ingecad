@@ -44,6 +44,11 @@ def _drawing(path: Path) -> Path:
     rule = filters.add_xrecord("*A2")
     rule.reset([(290, 1), (1, "AcLyLayerFilter"), (90, 1),
                 (300, "Rojas-MUR"), (301, 'NAME=="MUR*" AND COLOR=="1"')])
+    # the pre-2005 copy AutoCAD writes next to it, keyed by name
+    legacy = doc.layers.head.get_extension_dict().add_dictionary(
+        "ACAD_LAYERFILTERS").add_xrecord("Rojas-MUR")
+    legacy.reset([(1, "Rojas-MUR"), (1, "MUR*"), (1, "1"), (1, "*"), (70, 0),
+                  (1, "*"), (1, "*")])
     doc.saveas(path)
     return path
 
@@ -179,3 +184,198 @@ def test_groups_keep_their_layers_through_save_as_dwg(tmp_path):
     document = Document.load(_drawing(tmp_path / "groups.dxf"))
     document.save_as(tmp_path / "groups.dwg")
     assert _tree(load_dwg(tmp_path / "groups.dwg")) == EXPECTED
+
+
+# -- editing -------------------------------------------------------------------
+
+def _document(tmp_path):
+    from core.document import Document
+
+    return Document.load(_drawing(tmp_path / "groups.dxf"))
+
+
+def _undo_redo(document, command):
+    """Do, undo, redo: the tree after each."""
+    before = _tree(document)
+    command.do(document)
+    after = _tree(document)
+    command.undo(document)
+    assert _tree(document) == before
+    command.do(document)
+    assert _tree(document) == after
+    return after
+
+
+def test_a_new_group_at_the_top_and_inside_another(tmp_path):
+    from core.layer_filters import NewGroupFilterCommand
+
+    document = _document(tmp_path)
+    after = _undo_redo(document, NewGroupFilterCommand((), "Estructura",
+                                                       ["COTAS"]))
+    assert (0, GROUP, "Estructura", ["COTAS"]) in after
+    inside = NewGroupFilterCommand(("*A1",), "Ventanas")
+    after = _undo_redo(document, inside)
+    assert after[:3] == [(0, GROUP, "Arquitectura", ["PUERTAS", "TEXTO"]),
+                         (1, GROUP, "Carpinteria", ["PUERTAS"]),
+                         (1, GROUP, "Ventanas", [])]
+
+
+def test_a_new_group_in_a_drawing_without_filters(tmp_path):
+    from core.document import Document
+    from core.layer_filters import NewGroupFilterCommand
+
+    document = Document.new()
+    _undo_redo(document, NewGroupFilterCommand((), "Uno", ["0"]))
+    assert _tree(document) == [(0, GROUP, "Uno", ["0"])]
+
+
+def test_layers_go_into_a_group_and_out_of_it(tmp_path):
+    from core.layer_filters import GroupLayersCommand
+
+    document = _document(tmp_path)
+    after = _undo_redo(document, GroupLayersCommand(("*A1",), ["COTAS",
+                                                              "TEXTO"], True))
+    assert after[0] == (0, GROUP, "Arquitectura", ["COTAS", "PUERTAS", "TEXTO"])
+    after = _undo_redo(document, GroupLayersCommand(("*A1",), ["PUERTAS"],
+                                                    False))
+    assert after[0] == (0, GROUP, "Arquitectura", ["COTAS", "TEXTO"])
+    assert after[1] == (1, GROUP, "Carpinteria", ["PUERTAS"])     # its own
+
+
+def test_rename_and_delete_keep_the_old_copy_in_step(tmp_path):
+    from core.layer_filters import (DeleteLayerFilterCommand,
+                                    RenameLayerFilterCommand)
+
+    document = _document(tmp_path)
+    legacy = document.doc.layers.head.get_extension_dict()["ACAD_LAYERFILTERS"]
+    after = _undo_redo(document, RenameLayerFilterCommand(("*A2",), "Muros"))
+    assert after[2] == (0, PROPERTY, "Muros", ["MUROS", "MUROS-EXT"])
+    assert list(legacy.keys()) == ["Muros"]
+    assert legacy["Muros"].tags[0].value == "Muros"
+    after = _undo_redo(document, DeleteLayerFilterCommand(("*A2",)))
+    assert [name for _d, _k, name, _n in after] == ["Arquitectura", "Carpinteria"]
+    assert list(legacy.keys()) == []
+    command = DeleteLayerFilterCommand(("*A1",))      # with its nested group
+    after = _undo_redo(document, command)
+    assert after == []
+    command.undo(document)
+    assert [name for _d, _k, name, _n in _tree(document)] == [
+        "Arquitectura", "Carpinteria"]
+
+
+@pytest.mark.parametrize("how", ["delete", "purge"])
+def test_a_deleted_layer_leaves_its_groups_and_comes_back_to_them(tmp_path, how):
+    """Deleting a layer took it out of nothing, and undo made a NEW layer
+    (another handle; lineweight, plot and description lost): its groups
+    no longer knew it."""
+    from core.cleanup import PurgeCommand
+    from core.layers import DeleteLayerCommand
+
+    document = _document(tmp_path)
+    layer = document.doc.layers.get("PUERTAS")
+    layer.dxf.lineweight = 50
+    layer.description = "doors"
+    handle = layer.dxf.handle
+    command = (DeleteLayerCommand("PUERTAS") if how == "delete"
+               else PurgeCommand({"layers": ["PUERTAS"]}))
+    command.do(document)
+    assert _tree(document)[:2] == [(0, GROUP, "Arquitectura", ["TEXTO"]),
+                                   (1, GROUP, "Carpinteria", [])]
+    record = document.doc.layers.head.get_extension_dict()["ACLYDICTIONARY"]["*A1"]
+    assert handle not in [str(t.value) for t in record.tags if t.code == 330]
+    command.undo(document)
+    assert _tree(document) == EXPECTED
+    back = document.doc.layers.get("PUERTAS")
+    assert (back.dxf.handle, back.dxf.lineweight, back.description) == (
+        handle, 50, "doors")
+
+
+def test_a_deleted_layer_leaves_no_orphan_in_the_file(tmp_path):
+    """A layer's extension dictionary stayed in OBJECTS when the layer was
+    unhooked, and was saved with an owner that no longer existed."""
+    from core.document import Document
+    from core.layers import DeleteLayerCommand
+
+    doc = ezdxf.new("R2018")
+    doc.layers.add("X").new_extension_dict().add_xrecord(
+        "ADSK_XREC_LAYER_RECONCILED").reset([(290, 1)])
+    doc.saveas(tmp_path / "x.dxf")
+    document = Document.load(tmp_path / "x.dxf")
+    command = DeleteLayerCommand("X")
+    command.do(document)
+    document.doc.saveas(tmp_path / "gone.dxf")
+    assert ezdxf.readfile(tmp_path / "gone.dxf").audit().fixes == []
+    command.undo(document)
+    document.doc.saveas(tmp_path / "back.dxf")
+    back = ezdxf.readfile(tmp_path / "back.dxf")
+    assert back.audit().fixes == []
+    assert back.layers.get("X").get_extension_dict().get(
+        "ADSK_XREC_LAYER_RECONCILED") is not None
+
+
+@pytest.mark.skipif(find_dxf2dwg() is None, reason="LibreDWG not available")
+def test_groups_made_here_survive_save_as_dwg(tmp_path):
+    from core.document import Document
+    from core.layer_filters import NewGroupFilterCommand
+    from formats.dwg_bridge import load_dwg
+
+    document = Document.new()
+    for name in ("A", "B"):
+        document.doc.layers.add(name)
+    outer = NewGroupFilterCommand((), "Afuera", ["A", "B"])
+    outer.do(document)
+    NewGroupFilterCommand(outer.path, "Adentro", ["B"]).do(document)
+    document.save_as(tmp_path / "made.dwg")
+    assert _tree(load_dwg(tmp_path / "made.dwg")) == [
+        (0, GROUP, "Afuera", ["A", "B"]), (1, GROUP, "Adentro", ["B"])]
+
+
+def test_the_panel_makes_renames_fills_and_deletes_a_group(panel, qapp):
+    win = panel.window
+    panel.filters.setCurrentItem(_item(panel, "Arquitectura"))
+    panel.new_group_filter()                         # inside the chosen group
+    item = panel.filters.currentItem()
+    assert item.text(0) == "Group Filter1"
+    assert item.parent().text(0) == "Arquitectura"
+    item.setText(0, "Ventanas")                      # what typing the name does
+    assert _item(panel, "Ventanas") is panel.filters.currentItem()
+    path = panel._chosen_row().layer_filter.path
+    panel.group_layers(path, ["COTAS"], True)
+    assert panel._rows == ["COTAS"]
+    _item(panel, "Carpinteria").setText(0, "Ventanas")   # a duplicate name
+    assert _item(panel, "Carpinteria") is not None
+    panel.filters.setCurrentItem(_item(panel, "Ventanas"))
+    panel.delete_filter()
+    assert [r.layer_filter.name for r in panel._filter_rows] == [
+        "Arquitectura", "Carpinteria", "Rojas-MUR"]
+    names = lambda: [(r.layer_filter.name, r.names) for r in panel._filter_rows]  # noqa: E731
+    for expected in (("Ventanas", ["COTAS"]), ("Ventanas", []),
+                     ("Group Filter1", [])):
+        win._on_command_submitted("U")
+        _wait_regen(qapp, win)
+        assert expected in names()
+    win._on_command_submitted("U")
+    _wait_regen(qapp, win)
+    assert [n for n, _l in names()] == ["Arquitectura", "Carpinteria", "Rojas-MUR"]
+
+
+def test_the_first_group_of_a_drawing_shows_the_tree(qapp):
+    from views.main_window import MainWindow
+
+    win = MainWindow()
+    win.show()
+    win.new_document()
+    _wait_regen(qapp, win)
+    try:
+        if win._layers_panel is None:
+            win.toggle_layers_panel()
+        panel = win._layers_panel
+        panel.refresh()
+        assert panel.filters.isHidden()
+        panel.table.selectRow(panel._rows.index("0"))
+        panel._new_group_with(panel.selected_layers())
+        assert not panel.filters.isHidden()
+        assert panel._rows == ["0"]
+    finally:
+        win.document.dirty = False
+        win.close()

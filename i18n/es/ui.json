@@ -2176,5 +2176,11 @@
   "freeze the filter's layers": "inutilizar las capas del filtro",
   "thaw the filter's layers": "reutilizar las capas del filtro",
   "lock the filter's layers": "bloquear las capas del filtro",
-  "unlock the filter's layers": "desbloquear las capas del filtro"
+  "unlock the filter's layers": "desbloquear las capas del filtro",
+  "New Group Filter": "Nuevo filtro de grupo",
+  "A filter named {name} already exists.": "Ya existe un filtro llamado {name}.",
+  "Add to group": "Añadir al grupo",
+  "New group with these layers": "Nuevo grupo con estas capas",
+  "Remove from group": "Quitar del grupo",
+  "Group Filter{n}": "Filtro de grupo{n}"
 }

@@ -9,7 +9,8 @@ Every change routes through the layer Commands so undo/redo is exact.
 Above the table, when the drawing carries any, the layer filters AutoCAD
 saved with it (groups and property filters, ``core.layer_filters``): a
 click shows that filter's layers, a right-click turns them on, off, frozen
-or locked in one undo step.
+or locked in one undo step, and makes, renames or deletes a group. Layers
+join a group dragged onto it or from their own right-click menu.
 """
 from __future__ import annotations
 
@@ -155,6 +156,46 @@ LayersPanel QTreeWidget { font-size: 11px; background: #1e1e22; }
 """
 
 
+class _FilterTree(QTreeWidget):
+    """The filter tree, a drop target for layers dragged from the table:
+    dropped on a group, they join it (AutoCAD's way of filling a group)."""
+
+    def __init__(self, panel) -> None:
+        super().__init__(panel)
+        self.panel = panel
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+
+    def _group_at(self, event):
+        if event.source() is not self.panel.table:
+            return None
+        row = self.panel._row_of(self.itemAt(event.position().toPoint()))
+        if row is None or row.layer_filter.kind != layer_filters.GROUP:
+            return None
+        return row
+
+    def dragEnterEvent(self, event) -> None:
+        if event.source() is self.panel.table:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        if self._group_at(event) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        row = self._group_at(event)
+        if row is None:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.panel.group_layers(row.layer_filter.path,
+                                self.panel.selected_layers(), True)
+
+
 class LayersPanel(QWidget):
     changed = Signal()   # a layer edit landed: repaint the viewport
 
@@ -231,10 +272,16 @@ class LayersPanel(QWidget):
         del_btn = self._tool_button("🗑", tr("Delete layer"), self._delete_layer)
         cur_btn = self._tool_button("✓", tr("Set current"),
                                     self._set_current_selected)
+        # The tree only shows once a drawing has filters, so the first
+        # group starts here, as at the top of the manager.
+        group_btn = self._tool_button("", tr("New Group Filter"),
+                                      lambda: self.new_group_filter())
+        from PySide6.QtWidgets import QStyle
+        group_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
         buttons = QHBoxLayout()
         buttons.setContentsMargins(2, 2, 2, 0)
         buttons.setSpacing(1)
-        for b in (new_btn, del_btn, cur_btn):
+        for b in (new_btn, del_btn, cur_btn, group_btn):
             buttons.addWidget(b)
         # "Search for layer" — filters the list live, like the manager's box.
         from PySide6.QtWidgets import QLineEdit
@@ -250,14 +297,25 @@ class LayersPanel(QWidget):
         # The layer filters (groups and property filters) the drawing
         # carries, as the manager's tree. Hidden while there are none: in
         # a sidebar, an "All" node alone would only take the table's room.
-        self.filters = QTreeWidget(self)
+        self.filters = _FilterTree(self)
         self.filters.setHeaderHidden(True)
         self.filters.setIndentation(12)
+        self.filters.setEditTriggers(QAbstractItemView.EditKeyPressed
+                                     | QAbstractItemView.SelectedClicked)
         self.filters.setContextMenuPolicy(Qt.CustomContextMenu)
         self.filters.customContextMenuRequested.connect(self._filter_menu)
         self.filters.currentItemChanged.connect(self._filter_chosen)
+        self.filters.itemChanged.connect(self._filter_renamed)
         self._filter_rows: list[layer_filters.FilterRow] = []
         self._filter_signature = None
+        self._chosen_path = None
+        self._filters_of = None
+        # Layers are dragged from the table onto a group, or put in one
+        # from their right-click menu.
+        self.table.setDragEnabled(True)
+        self.table.setDragDropMode(QAbstractItemView.DragOnly)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._table_menu)
         splitter = QSplitter(Qt.Vertical, self)
         splitter.addWidget(self.filters)
         splitter.addWidget(self.table)
@@ -405,24 +463,32 @@ class LayersPanel(QWidget):
     # -- layer filters ----------------------------------------------------------
     def _fill_filters(self, rows: list[layer_filters.FilterRow]) -> None:
         """Rebuild the tree when the drawing's filters changed; otherwise
-        keep it, and with it the user's choice."""
+        keep it. Either way the chosen filter stays chosen (by its path:
+        a rename or a new group rebuilds the tree)."""
         self._filter_rows = rows
         signature = (id(self.document), tuple(
-            (r.depth, r.layer_filter.kind, r.layer_filter.name) for r in rows))
+            (r.layer_filter.path, r.layer_filter.kind, r.layer_filter.name)
+            for r in rows))
         if signature == self._filter_signature:
             return
         self._filter_signature = signature
+        if self._filters_of != id(self.document):
+            self._filters_of = id(self.document)
+            self._chosen_path = None         # another drawing: back to All
+        chosen = self._chosen_path
         self.filters.blockSignals(True)
         self.filters.clear()
         root = QTreeWidgetItem(self.filters, [tr_context("Layer filter|All")])
         root.setData(0, Qt.UserRole, _ALL_LAYERS)
         used = QTreeWidgetItem(root, [tr("All Used Layers")])
         used.setData(0, Qt.UserRole, _USED_LAYERS)
+        current = {None: root, "used": used}.get(chosen, root)
         parents = [root]
         for index, row in enumerate(rows):
             del parents[row.depth + 1:]
             item = QTreeWidgetItem(parents[-1], [row.layer_filter.name])
             item.setData(0, Qt.UserRole, index)
+            item.setFlags(item.flags() | Qt.ItemIsEditable | Qt.ItemIsDropEnabled)
             if row.layer_filter.kind == layer_filters.PROPERTY:
                 item.setToolTip(0, row.layer_filter.expression)
             if row.names is None:
@@ -430,10 +496,13 @@ class LayersPanel(QWidget):
                 item.setToolTip(0, tr(
                     "This filter's rule uses a property IngeCAD does not "
                     "read yet: {rule}", rule=row.layer_filter.expression))
+            if row.layer_filter.path == chosen:
+                current = item
             parents.append(item)
         self.filters.expandAll()
-        self.filters.setCurrentItem(root)
+        self.filters.setCurrentItem(current)
         self.filters.blockSignals(False)
+        self._remember_chosen()
         self.filters.setVisible(bool(rows))
 
     def _chosen_filter(self) -> int:
@@ -441,6 +510,24 @@ class LayersPanel(QWidget):
         if item is None or not self._filter_rows:
             return _ALL_LAYERS
         return item.data(0, Qt.UserRole)
+
+    def _row_of(self, item) -> layer_filters.FilterRow | None:
+        index = item.data(0, Qt.UserRole) if item is not None else None
+        if isinstance(index, int) and 0 <= index < len(self._filter_rows):
+            return self._filter_rows[index]
+        return None
+
+    def _chosen_row(self) -> layer_filters.FilterRow | None:
+        return self._row_of(self.filters.currentItem())
+
+    def _remember_chosen(self) -> None:
+        row = self._chosen_row()
+        if row is not None:
+            self._chosen_path = row.layer_filter.path
+        elif self._chosen_filter() == _USED_LAYERS:
+            self._chosen_path = "used"
+        else:
+            self._chosen_path = None
 
     def _filter_names(self, infos) -> set[str] | None:
         """The layers the chosen filter shows; None for all of them."""
@@ -454,26 +541,37 @@ class LayersPanel(QWidget):
         return None
 
     def _filter_chosen(self, *_args) -> None:
+        self._remember_chosen()
         self.refresh()
 
     def _filter_menu(self, pos) -> None:
-        """Right-click on a filter: its layers on, off, frozen or locked,
-        as the manager's Visibility and Lock submenus."""
+        """Right-click on a filter, as the manager's: a new group inside
+        it (only a group or All can hold one), rename, delete, and its
+        layers' Visibility and Lock."""
         item = self.filters.itemAt(pos)
-        if item is None or self.document is None or item.isDisabled():
+        if item is None or self.document is None:
             return
         self.filters.setCurrentItem(item)
+        row = self._row_of(item)
         menu = QMenu(self)
-        for label, prop, value in (
-                (tr("Turn layers on"), "on", True),
-                (tr("Turn layers off"), "on", False),
-                (tr("Thaw layers"), "frozen", False),
-                (tr("Freeze layers"), "frozen", True),
-                (tr("Lock layers"), "locked", True),
-                (tr("Unlock layers"), "locked", False)):
-            if prop == "locked" and value:
-                menu.addSeparator()
-            menu.addAction(label, lambda p=prop, v=value: self.set_filter_state(p, v))
+        if item.data(0, Qt.UserRole) == _ALL_LAYERS or (
+                row is not None and row.layer_filter.kind == layer_filters.GROUP):
+            menu.addAction(tr("New Group Filter"), self.new_group_filter)
+        if row is not None:
+            menu.addAction(tr("Rename"), lambda: self.filters.editItem(item))
+            menu.addAction(tr("Delete"), self.delete_filter)
+        if not item.isDisabled():
+            menu.addSeparator()
+            for label, prop, value in (
+                    (tr("Turn layers on"), "on", True),
+                    (tr("Turn layers off"), "on", False),
+                    (tr("Thaw layers"), "frozen", False),
+                    (tr("Freeze layers"), "frozen", True),
+                    (tr("Lock layers"), "locked", True),
+                    (tr("Unlock layers"), "locked", False)):
+                if prop == "locked" and value:
+                    menu.addSeparator()
+                menu.addAction(label, lambda p=prop, v=value: self.set_filter_state(p, v))
         menu.exec(self.filters.viewport().mapToGlobal(pos))
 
     def set_filter_state(self, prop: str, value: bool) -> None:
@@ -486,6 +584,92 @@ class LayersPanel(QWidget):
             self.window.command_line.echo(tr("Nothing to change."))
             return
         self._execute(command)
+
+    def new_group_filter(self) -> None:
+        """A new group inside the chosen group (at the top from All or a
+        property filter), its name open for typing, as AutoCAD does."""
+        if self.document is None:
+            self.window.new_document()
+        row = self._chosen_row()
+        parent = (row.layer_filter.path if row is not None
+                  and row.layer_filter.kind == layer_filters.GROUP else ())
+        command = layer_filters.NewGroupFilterCommand(
+            parent, layer_filters.unique_filter_name(self.document))
+        self._execute(command)
+        self._chosen_path = command.path
+        self._filter_signature = None
+        self.refresh()
+        item = self.filters.currentItem()
+        if item is not None and self._row_of(item) is not None:
+            self.filters.editItem(item)
+
+    def delete_filter(self) -> None:
+        row = self._chosen_row()
+        if row is None:
+            return
+        self._chosen_path = None
+        self._execute(layer_filters.DeleteLayerFilterCommand(row.layer_filter.path))
+
+    def _filter_renamed(self, item, _column: int) -> None:
+        row = self._row_of(item)
+        if row is None or self._loading:
+            return
+        new_name = item.text(0).strip()
+        old_name = row.layer_filter.name
+        if new_name.lower() in (layer_filters.filter_names(self.document)
+                                - {old_name.lower()}):
+            self.window.command_line.echo(
+                tr("A filter named {name} already exists.", name=new_name))
+            new_name = ""
+        if not new_name or new_name == old_name:
+            self.filters.blockSignals(True)
+            item.setText(0, old_name)
+            self.filters.blockSignals(False)
+            return
+        self._execute(layer_filters.RenameLayerFilterCommand(
+            row.layer_filter.path, new_name))
+
+    def selected_layers(self) -> list[str]:
+        rows = sorted({index.row() for index in self.table.selectedIndexes()})
+        return [self._row_layer(r) for r in rows if self._row_layer(r)]
+
+    def group_layers(self, path, names, add: bool) -> None:
+        """Put layers in a group, or take them out (one undo step)."""
+        if path is None or not names:
+            return
+        self._execute(layer_filters.GroupLayersCommand(path, names, add))
+
+    def _table_menu(self, pos) -> None:
+        """Right-click on layers: put them in a group, or take them out of
+        the group being shown."""
+        if self.document is None:
+            return
+        names = self.selected_layers()
+        if not names:
+            return
+        menu = QMenu(self)
+        groups = [r for r in self._filter_rows
+                  if r.layer_filter.kind == layer_filters.GROUP]
+        if groups:
+            add = menu.addMenu(tr("Add to group"))
+            for r in groups:
+                add.addAction("    " * r.depth + r.layer_filter.name,
+                              lambda p=r.layer_filter.path: self.group_layers(p, names, True))
+        menu.addAction(tr("New group with these layers"),
+                       lambda: self._new_group_with(names))
+        chosen = self._chosen_row()
+        if chosen is not None and chosen.layer_filter.kind == layer_filters.GROUP:
+            menu.addAction(tr("Remove from group"), lambda: self.group_layers(
+                chosen.layer_filter.path, names, False))
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _new_group_with(self, names) -> None:
+        command = layer_filters.NewGroupFilterCommand(
+            (), layer_filters.unique_filter_name(self.document), names)
+        self._execute(command)
+        self._chosen_path = command.path
+        self._filter_signature = None
+        self.refresh()
 
     def _fill_row(self, row: int, info: layer_ops.LayerInfo) -> None:
         # Status: current / in use / empty (the manager's official trio).

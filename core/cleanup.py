@@ -437,15 +437,21 @@ class PurgeCommand(Command):
                 self.removed_handles.append(e.dxf.handle)
                 layout.unlink_entity(e)
                 self._undo.append(("entity", e, layout))
+        from core.layer_filters import unlist_layers
+        from core.layers import unhook_table_entry
+
         for category in ("layers", "ltypes", "textstyles", "dimstyles", "regapps"):
             table = _table_for(doc, category)
             for name in self.items.get(category, ()):
                 if not table.has_entry(name):
                     continue
                 entry = table.get(name)
-                table.discard(name)
-                doc.entitydb.discard(entry)
-                self._undo.append(("table", table, entry))
+                if category == "layers":
+                    groups = unlist_layers(document, [entry.dxf.handle])
+                    if groups:
+                        self._undo.append(("layer groups", groups))
+                owned = unhook_table_entry(doc, table, entry)
+                self._undo.append(("table", table, entry, owned))
         for name in self.items.get("groups", ()):
             try:
                 group = doc.groups.get(name)
@@ -469,6 +475,9 @@ class PurgeCommand(Command):
         document.dirty = True
 
     def undo(self, document) -> None:
+        from core.layer_filters import relist_layers
+        from core.layers import rehook_table_entry
+
         doc = document.doc
         for record in reversed(self._undo):
             kind = record[0]
@@ -484,9 +493,10 @@ class PurgeCommand(Command):
                 _kind, e, layout = record
                 layout.add_entity(e)
             elif kind == "table":
-                _kind, table, entry = record
-                if not table.has_entry(entry.dxf.name):
-                    table.add_entry(entry)
+                _kind, table, entry, owned = record
+                rehook_table_entry(doc, table, entry, owned)
+            elif kind == "layer groups":
+                relist_layers(document, record[1])
             elif kind == "group":
                 _kind, name, description, selectable, handles = record
                 group = doc.groups.new(name, description=description,

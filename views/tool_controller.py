@@ -3387,6 +3387,11 @@ class ToolController(QObject):
             self.tool.on_enter()
             self.changed.emit()
             return True
+        if not self.tool.wants_raw_text():
+            # arithmetic in any number or coordinate: 43.3/3, 123+45,40/2
+            from core.calc import expand_input
+
+            stripped = expand_input(stripped)
         if not self.tool.entity_picker:
             # END, TAN, NONE... at a point prompt: a one-shot object snap,
             # ahead of the command's own options (AutoCAD reads CEN at

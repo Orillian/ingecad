@@ -14,6 +14,8 @@ from __future__ import annotations
 import ast
 import math
 import operator
+import re
+from typing import Optional
 
 #: The scientific area: what a drafter actually reaches for.
 FUNCTIONS = {
@@ -100,6 +102,72 @@ def _eval(node, variables):
         except Exception as exc:
             raise CalcError(str(exc)) from exc
     raise CalcError("not an arithmetic expression")
+
+
+# -- arithmetic at the prompt ---------------------------------------------------
+
+_PLAIN_NUMBER = re.compile(r"^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$")
+_ARITHMETIC = re.compile(r"[0-9.]")
+
+
+def _fields(text: str) -> Optional[list[str]]:
+    """``text`` cut at the separators of coordinate input (``,`` and
+    ``<``) that are not inside parentheses, separators kept; None when a
+    parenthesis does not close."""
+    out, depth, start = [], 0, 0
+    for i, ch in enumerate(text):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth < 0:
+                return None
+        elif ch in ",<" and depth == 0:
+            out.extend([text[start:i], ch])
+            start = i + 1
+    if depth:
+        return None
+    out.append(text[start:])
+    return out
+
+
+def expand_input(text: str) -> str:
+    """Prompt input with its arithmetic worked out, as BricsCAD reads it
+    (AutoCAD asks for 'CAL): ``43.3/3`` -> ``14.4333333333333``,
+    ``123+45,40/2`` -> ``168,20``, ``@20*2<45`` -> ``@40<45``.
+
+    Rafael's eighth review (second e-mail). Only a field that is arithmetic
+    -- digits and operators, the constants and functions above, ``^`` for a
+    power -- and that evaluates is replaced; everything else comes back as
+    it was typed: an option (``C``, ``U``), a plain number, a negative
+    coordinate, a name.
+    """
+    stripped = text.strip()
+    prefix = stripped[:1] if stripped[:1] in ("@", "#") else ""
+    body = stripped[len(prefix):]
+    fields = _fields(body)
+    if not fields or fields.count("<") > 1:
+        return text
+    changed = False
+    out = []
+    for field in fields:
+        if field in (",", "<"):
+            out.append(field)
+            continue
+        token = field.strip()
+        if not token or _PLAIN_NUMBER.match(token) \
+                or not _ARITHMETIC.search(token):
+            out.append(field)
+            continue
+        try:
+            value = evaluate(token.replace("^", "**"))
+        except CalcError:
+            return text
+        if not math.isfinite(value):
+            return text
+        out.append(f"{value:.15g}")
+        changed = True
+    return prefix + "".join(out) if changed else text
 
 
 # -- units conversion ---------------------------------------------------------

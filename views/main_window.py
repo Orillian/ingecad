@@ -277,6 +277,12 @@ def _lineweight_name(value: int) -> str:
         int(value), f"{int(value) / 100:.2f} mm")
 
 
+
+#: ZOOM's prompt in the Model tab and on a sheet (AutoCAD 2026, group H,
+#: without Dynamic and Object; Enter is Extents, the wheel zooms anytime).
+ZOOM_PROMPT = ("Specify corner of window, enter a scale factor (nX or nXP), or "
+               "[All/Center/Extents/Previous/Scale/Window] <Extents>:")
+
 class MainWindow(DocumentTabsMixin, QMainWindow):
     # A live viewport regen must fit a frame-ish budget or pan blocks the UI.
     _VP_LIVE_BUDGET_MS = 33.0
@@ -5400,8 +5406,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         if getattr(self, "_active_vp", None) is not None:
             return Prompt(tr("ZOOM [Extents/Window/Previous] or scale nXP:"),
                           self._zoom_option)
-        return Prompt(tr("ZOOM [Extents/Window/Previous] <Extents>:"),
-                      self._zoom_option)
+        return Prompt(tr(ZOOM_PROMPT), self._zoom_option)
 
     def _vp_view_changed_by_command(self) -> None:
         """A command moved the active viewport's view (ZOOM E, nXP, W):
@@ -5443,11 +5448,14 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
                                       scale=layout_ops.scale_label(factor)))
             self._vp_view_changed_by_command()
             return
-        # Both ZOOM prompts offer the same options, so either source resolves
-        # "Ventana" and "_W" to the W the branches below expect.
-        opt = (i18n.keywords.match(option, "ZOOM [Extents/Window/Previous] "
-                                           "<Extents>:")
+        # The Model tab's prompt offers every option the viewport's does, so
+        # it resolves "Ventana" and "_W" to the W the branches below expect.
+        opt = (i18n.keywords.match(option, ZOOM_PROMPT)
                or option.strip().upper() or "E")
+        if active_vp is None and self._zoom_typed(option):
+            return
+        if opt == "A" and active_vp is None:
+            opt = "E"            # All: the drawing has no LIMITS to add
         if opt in ("E", "EXTENTS"):
             if active_vp is not None:
                 # inside a viewport, Extents fits the MODEL in it
@@ -5470,8 +5478,50 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         elif opt in ("P", "PREVIOUS"):
             if not self.viewport.zoom_previous():
                 self.command_line.echo(tr("No previous view"))
+        elif opt == "C" and active_vp is None and self.tools.tool is None:
+            self.tools.start_tool("ZOOMCENTER")
+        elif opt == "S":
+            return Prompt(tr("Enter a scale factor (nX or nXP):"),
+                          self._zoom_option)
         else:
             self.command_line.echo(tr('Unknown ZOOM option "{name}".', name=opt))
+
+    def _zoom_typed(self, option: str) -> bool:
+        """What ZOOM takes besides a keyword in the Model tab or on a sheet,
+        as AutoCAD 2026 does: ``2X`` (of the current view), a bare ``2``
+        (of the whole drawing), or a typed first corner of a window."""
+        from core.coords import CoordinateError, parse_point
+        from tools.zoom_window import parse_times
+
+        text = option.strip()
+        times = parse_times(text)
+        whole = None
+        if times is None:
+            try:
+                whole = float(text)
+            except ValueError:
+                whole = None
+        if times is not None or (whole is not None and whole > 0):
+            view = self.viewport.view
+            self.viewport.push_view()
+            if whole is not None:
+                view.zoom_extents(*self.viewport.scene_bounds())
+                times = whole
+            view.scale = min(max(view.scale * times, view.MIN_SCALE), view.MAX_SCALE)
+            self.viewport.update()
+            return True
+        if "," not in text or self.tools.tool is not None:
+            return False
+        try:
+            corner = parse_point(text)
+        except CoordinateError:
+            corner = None
+        if corner is None:
+            return False
+        self.tools.start_tool("ZOOMWINDOW")
+        self.tools.tool.on_point((corner.x, corner.y))
+        self.tools.changed.emit()
+        return True
 
     def _cmd_regen(self, *args) -> None:
         if self.document is None:

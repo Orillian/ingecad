@@ -11,9 +11,22 @@ navigating, and building them cost 2 s on entry).
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from tools.base import Point, Tool
+
+#: ``2X``: a factor of the current view, as AutoCAD's ZOOM reads it.
+_TIMES = re.compile(r"^\s*([0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\s*[xX]\s*$")
+
+
+def parse_times(text: str) -> Optional[float]:
+    """``2X`` -> 2.0; anything else (``2``, ``2XP``) -> None."""
+    match = _TIMES.match(text)
+    if match is None:
+        return None
+    value = float(match.group(1))
+    return value if value > 0 else None
 
 
 class ZoomWindowTool(Tool):
@@ -52,4 +65,67 @@ class ZoomWindowTool(Tool):
         self.ctx.finish()
 
 
-ZOOM_TOOL_CLASSES = {"ZOOMWINDOW": ZoomWindowTool}
+class ZoomCenterTool(Tool):
+    """ZOOM Center as AutoCAD 2026 asks for it (group H): "Specify center
+    point:", then "Enter magnification or height <current>:" -- a height
+    in drawing units, or ``nX`` of the current view; Enter keeps it."""
+
+    def __init__(self, ctx) -> None:
+        super().__init__(ctx)
+        self.name = "ZOOMCENTER"
+        self._center: Optional[Point] = None
+
+    def _view(self):
+        services = self.ctx.services
+        return services.window.viewport.view if services is not None else None
+
+    def _height(self) -> float:
+        view = self._view()
+        return view.height / view.scale if view is not None and view.scale else 0.0
+
+    def start(self) -> None:
+        self.prompt("Specify center point:")
+
+    def on_point(self, point: Point) -> None:
+        if self._center is None:
+            self._center = point
+            self.last_point = point
+            self._ask_height()
+
+    def _ask_height(self) -> None:
+        self.prompt("Enter magnification or height <{height}>:",
+                    height=f"{self._height():.4f}")
+
+    def on_option(self, text: str) -> bool:
+        if self._center is None:
+            return False
+        times = parse_times(text)
+        try:
+            height = self._height() / times if times else float(text)
+        except ValueError:
+            return False
+        if height <= 0:
+            self._ask_height()
+            return True
+        self._zoom(height)
+        return True
+
+    def on_enter(self) -> None:
+        if self._center is None:
+            self.ctx.finish()
+        else:
+            self._zoom(self._height())
+
+    def _zoom(self, height: float) -> None:
+        view = self._view()
+        services = self.ctx.services
+        self.ctx.finish()
+        if view is None or services is None or height <= 0:
+            return
+        half_h = height / 2.0
+        half_w = half_h * view.width / max(view.height, 1)
+        cx, cy = self._center
+        services.zoom_to_window((cx - half_w, cy - half_h, cx + half_w, cy + half_h))
+
+
+ZOOM_TOOL_CLASSES = {"ZOOMWINDOW": ZoomWindowTool, "ZOOMCENTER": ZoomCenterTool}

@@ -341,6 +341,9 @@ class MTextInPlaceEditor(QWidget):
 
         self.edit = QTextEdit(self)
         self.edit.setAcceptRichText(False)
+        from views import symbol_menu
+
+        symbol_menu.install(self.edit)       # right click > Symbol
         self.edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         option = QTextOption()

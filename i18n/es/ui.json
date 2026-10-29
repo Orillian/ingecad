@@ -2105,5 +2105,16 @@
   "Z": "Z",
   "Text pos vert": "Pos. vertical del texto",
   "Arrow 1": "Flecha 1",
-  "Arrow 2": "Flecha 2"
+  "Arrow 2": "Flecha 2",
+  "Symbol": "Símbolo",
+  "Degree": "Grados",
+  "Plus/Minus": "Más/menos",
+  "Square": "Cuadrado",
+  "Almost equal": "Casi igual",
+  "Not equal": "Distinto",
+  "Less than or equal": "Menor o igual",
+  "Greater than or equal": "Mayor o igual",
+  "Delta": "Delta",
+  "Squared": "Al cuadrado",
+  "Cubed": "Al cubo"
 }

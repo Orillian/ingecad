@@ -196,6 +196,10 @@ class PropertiesPanel(QWidget):
         else:   # 'num' or 'str'
             w = QLineEdit("" if value is _VARIES else _fmt(value))
             w.setPlaceholderText(tr("*varies*") if value is _VARIES else "")
+            if row.kind == "str":
+                from views import symbol_menu
+
+                symbol_menu.install(w)       # right click > Symbol
             w.editingFinished.connect(
                 lambda r=row, le=w: self._edit_text(r, le))
             self.tree.setItemWidget(item, 1, w)

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeCAD contributors.
-"""Entity selection: pick box, window (fully inside), crossing (touching).
+"""Entity selection: pick box, window (fully inside), crossing (touching),
+and their polygon forms (WPolygon, CPolygon) and the Fence.
 
 A GeometryIndex extracts pickable geometry per entity into NumPy arrays
 (the same lazy strategy as the snap engine). Entity types we do not know how
@@ -1015,6 +1016,111 @@ class GeometryIndex:
             touched[self._box_oidx[hit]] = True
         return sorted(self._owners[i] for i in np.nonzero(touched)[0])
 
+    def window_polygon(self, points) -> list[str]:
+        """WPolygon: entities FULLY inside the closed polygon ``points``
+        (SELECT, Command Reference) -- the polygon form of :meth:`window`,
+        as exact: a segment is inside when both ends are and it crosses no
+        edge, a circle or arc when a point of it is and it crosses none."""
+        ring = _ring(points)
+        if ring is None:
+            return []
+        if self._dirty:
+            self._build()
+        edges = _edges(ring, closed=True)
+        px0, py0 = ring.min(axis=0)
+        px1, py1 = ring.max(axis=0)
+        n = len(self._owners)
+        present = np.zeros(n, dtype=bool)
+        bad = np.zeros(n, dtype=bool)
+        if len(self._segs):
+            s, b = self._segs, self._seg_bounds
+            ins = ((b[:, 0] >= px0) & (b[:, 2] <= px1)
+                   & (b[:, 1] >= py0) & (b[:, 3] <= py1))
+            cand = np.nonzero(ins)[0]
+            ok = (_points_in_ring(ring, s[cand, 0], s[cand, 1])
+                  & _points_in_ring(ring, s[cand, 2], s[cand, 3])
+                  & ~_segs_cross_edges(s[cand], edges))
+            ins[cand] = ok
+            present[self._seg_oidx] = True
+            bad[self._seg_oidx[~ins]] = True
+        if len(self._circles):
+            c = self._circles
+            b = _circle_bounds(c)
+            ins = ((b[:, 0] >= px0) & (b[:, 2] <= px1)
+                   & (b[:, 1] >= py0) & (b[:, 3] <= py1))
+            for i in np.nonzero(ins)[0]:
+                x, y = _curve_point(c[i])
+                ins[i] = (bool(_points_in_ring(ring, np.array([x]),
+                                               np.array([y]))[0])
+                          and not _arc_crosses_edges(c[i], edges))
+            present[self._circle_oidx] = True
+            bad[self._circle_oidx[~ins]] = True
+        if len(self._boxes):
+            b = self._boxes
+            ins = ((b[:, 0] >= px0) & (b[:, 2] <= px1)
+                   & (b[:, 1] >= py0) & (b[:, 3] <= py1))
+            for i in np.nonzero(ins)[0]:
+                ins[i] = _box_inside_ring(b[i], ring, edges)
+            present[self._box_oidx] = True
+            bad[self._box_oidx[~ins]] = True
+        return [self._owners[i] for i in np.nonzero(present & ~bad)[0]]
+
+    def crossing_polygon(self, points) -> list[str]:
+        """CPolygon: entities inside OR crossing the closed polygon
+        ``points`` -- the polygon form of :meth:`crossing`."""
+        ring = _ring(points)
+        if ring is None:
+            return []
+        return self._touching(ring, _edges(ring, closed=True), area=True)
+
+    def fence(self, points) -> list[str]:
+        """Fence: entities the open polyline ``points`` crosses. Unlike
+        CPolygon it is not closed and may cross itself; what lies between
+        its legs without touching them stays out."""
+        ring = _ring(points, minimum=2)
+        if ring is None:
+            return []
+        return self._touching(ring, _edges(ring, closed=False), area=False)
+
+    def _touching(self, ring, edges, area: bool) -> list[str]:
+        """Entities crossing ``edges`` -- or, with ``area``, also lying
+        inside the closed ``ring`` they bound."""
+        if self._dirty:
+            self._build()
+        px0, py0 = ring.min(axis=0)
+        px1, py1 = ring.max(axis=0)
+        n = len(self._owners)
+        touched = np.zeros(n, dtype=bool)
+        if len(self._segs):
+            s, b = self._segs, self._seg_bounds
+            cand = np.nonzero((b[:, 0] <= px1) & (b[:, 2] >= px0)
+                              & (b[:, 1] <= py1) & (b[:, 3] >= py0))[0]
+            hit = _segs_cross_edges(s[cand], edges)
+            if area:
+                hit |= _points_in_ring(ring, s[cand, 0], s[cand, 1])
+            touched[self._seg_oidx[cand[hit]]] = True
+        if len(self._circles):
+            c = self._circles
+            b = _circle_bounds(c)
+            cand = np.nonzero((b[:, 0] <= px1) & (b[:, 2] >= px0)
+                              & (b[:, 1] <= py1) & (b[:, 3] >= py0))[0]
+            for i in cand:
+                hit = _arc_crosses_edges(c[i], edges)
+                if not hit and area:
+                    x, y = _curve_point(c[i])
+                    hit = bool(_points_in_ring(ring, np.array([x]),
+                                               np.array([y]))[0])
+                if hit:
+                    touched[self._circle_oidx[i]] = True
+        if len(self._boxes):
+            b = self._boxes
+            cand = np.nonzero((b[:, 0] <= px1) & (b[:, 2] >= px0)
+                              & (b[:, 1] <= py1) & (b[:, 3] >= py0))[0]
+            for i in cand:
+                if _box_touches(b[i], ring, edges, area):
+                    touched[self._box_oidx[i]] = True
+        return sorted(self._owners[i] for i in np.nonzero(touched)[0])
+
     def bounds_of(self, handles: Iterable[str]):
         """(min_x, min_y, max_x, max_y) of the given entities from the cached
         rows, or None. Ctrl+C needs a base point; ezdxf bbox.extents walks
@@ -1165,24 +1271,130 @@ def _arc_touches_rect(row, x0, y0, x1, y1) -> bool:
         px, py = cx + r * math.cos(angle), cy + r * math.sin(angle)
         if x0 <= px <= x1 and y0 <= py <= y1:
             return True
-    for ex0, ey0, ex1, ey1 in ((x0, y0, x1, y0), (x1, y0, x1, y1),
-                               (x1, y1, x0, y1), (x0, y1, x0, y0)):
-        dx, dy = ex1 - ex0, ey1 - ey0
-        fx, fy = ex0 - cx, ey0 - cy
-        a = dx * dx + dy * dy
-        if a == 0.0:
-            continue
-        b = 2.0 * (fx * dx + fy * dy)
-        disc = b * b - 4.0 * a * (fx * fx + fy * fy - r * r)
-        if disc < 0.0:
-            continue
-        sq = math.sqrt(disc)
-        for t in ((-b - sq) / (2.0 * a), (-b + sq) / (2.0 * a)):
-            if 0.0 <= t <= 1.0:
-                px, py = ex0 + t * dx, ey0 + t * dy
-                if _on_span(row, math.atan2(py - cy, px - cx) % math.tau):
-                    return True
+    return any(_arc_hits_segment(row, *edge)
+               for edge in ((x0, y0, x1, y0), (x1, y0, x1, y1),
+                            (x1, y1, x0, y1), (x0, y1, x0, y0)))
+
+
+def _arc_hits_segment(row, ex0, ey0, ex1, ey1) -> bool:
+    """Does the circle/arc row meet the segment (ex0, ey0)-(ex1, ey1)?
+    Exact: the line's roots on the circle, kept when on the arc's span."""
+    cx, cy, r = row[0], row[1], row[2]
+    dx, dy = ex1 - ex0, ey1 - ey0
+    fx, fy = ex0 - cx, ey0 - cy
+    a = dx * dx + dy * dy
+    if a == 0.0:
+        return False
+    b = 2.0 * (fx * dx + fy * dy)
+    disc = b * b - 4.0 * a * (fx * fx + fy * fy - r * r)
+    if disc < 0.0:
+        return False
+    sq = math.sqrt(disc)
+    for t in ((-b - sq) / (2.0 * a), (-b + sq) / (2.0 * a)):
+        if 0.0 <= t <= 1.0:
+            px, py = ex0 + t * dx, ey0 + t * dy
+            if _on_span(row, math.atan2(py - cy, px - cx) % math.tau):
+                return True
     return False
+
+
+def _ring(points, minimum: int = 3):
+    """``points`` as an (n, 2) float array, or None when too few."""
+    ring = np.asarray([(float(p[0]), float(p[1])) for p in points],
+                      dtype=np.float64).reshape(-1, 2)
+    return ring if len(ring) >= minimum else None
+
+
+def _edges(ring: np.ndarray, closed: bool) -> np.ndarray:
+    """The (k, 4) edges of a polyline, with the closing one when ``closed``."""
+    ends = np.roll(ring, -1, axis=0) if closed else ring[1:]
+    starts = ring if closed else ring[:-1]
+    return np.hstack((starts, ends))
+
+
+def _points_in_ring(ring: np.ndarray, xs, ys) -> np.ndarray:
+    """Even-odd test of many points against one closed ring, vectorised
+    over the points (the ring is a handful of clicks)."""
+    xs = np.asarray(xs, dtype=np.float64)
+    ys = np.asarray(ys, dtype=np.float64)
+    inside = np.zeros(len(xs), dtype=bool)
+    for (ax, ay), (bx, by) in zip(ring, np.roll(ring, -1, axis=0)):
+        if ay == by:
+            continue
+        straddles = (ay > ys) != (by > ys)
+        cross_x = ax + (ys - ay) * (bx - ax) / (by - ay)
+        inside ^= straddles & (xs < cross_x)
+    return inside
+
+
+def _segs_cross_edges(segs: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """Which of ``segs`` (m, 4) touch or cross any of ``edges`` (k, 4) --
+    :func:`_segments_cross`, vectorised over the segments."""
+    hit = np.zeros(len(segs), dtype=bool)
+    if not len(segs):
+        return hit
+    x1, y1, x2, y2 = segs[:, 0], segs[:, 1], segs[:, 2], segs[:, 3]
+    for x3, y3, x4, y4 in edges:
+        d = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3)
+        ok = np.abs(d) >= 1e-15
+        ds = np.where(ok, d, 1.0)
+        t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / ds
+        u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / ds
+        hit |= ok & (t >= 0.0) & (t <= 1.0) & (u >= 0.0) & (u <= 1.0)
+    return hit
+
+
+def _curve_point(row) -> tuple[float, float]:
+    """A point on a circle/arc row: an arc's start, a circle's 0 degrees."""
+    cx, cy, r = row[0], row[1], row[2]
+    angle = row[4] if row[3] != 0.0 else 0.0
+    return cx + r * math.cos(angle), cy + r * math.sin(angle)
+
+
+def _arc_crosses_edges(row, edges) -> bool:
+    return any(_arc_hits_segment(row, *edge) for edge in edges)
+
+
+def _box_corners(box) -> np.ndarray:
+    x0, y0, x1, y1 = box
+    return np.array([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+
+
+def _box_inside_ring(box, ring, edges) -> bool:
+    corners = _box_corners(box)
+    if not _points_in_ring(ring, corners[:, 0], corners[:, 1]).all():
+        return False
+    return not _segs_cross_edges(_edges(corners, closed=True), edges).any()
+
+
+def _box_touches(box, ring, edges, area: bool) -> bool:
+    """A boxed entity against a polygon (``area``) or a fence: its box
+    crosses an edge, holds a vertex, or -- polygon only -- lies inside."""
+    corners = _box_corners(box)
+    if _segs_cross_edges(_edges(corners, closed=True), edges).any():
+        return True
+    x0, y0, x1, y1 = box
+    if ((ring[:, 0] >= x0) & (ring[:, 0] <= x1)
+            & (ring[:, 1] >= y0) & (ring[:, 1] <= y1)).any():
+        return True
+    return area and bool(_points_in_ring(ring, corners[:1, 0], corners[:1, 1])[0])
+
+
+def polygon_is_simple(points) -> bool:
+    """Does the closed polygon ``points`` neither cross nor touch itself?
+    WPolygon and CPolygon refuse one that does (SELECT, Command Reference)."""
+    ring = _ring(points)
+    if ring is None:
+        return True
+    edges = _edges(ring, closed=True)
+    k = len(edges)
+    for i in range(k):
+        for j in range(i + 1, k):
+            if j == i + 1 or (i == 0 and j == k - 1):
+                continue       # neighbours share a vertex
+            if _segments_cross(edges[i], edges[j]):
+                return False
+    return True
 
 
 def _circle_intersects_rect(c, x0, y0, x1, y1) -> bool:

@@ -43,10 +43,34 @@ _ANCHOR_ATTR = {
 
 
 def _inside(point: Point, rects) -> bool:
-    for x0, y0, x1, y1 in rects:
-        if x0 <= point[0] <= x1 and y0 <= point[1] <= y1:
+    """Is ``point`` in any of the crossing regions: a rectangle
+    (x0, y0, x1, y1) or a CPolygon's vertices ((x, y), ...)."""
+    for region in rects:
+        if isinstance(region[0], (int, float)):
+            x0, y0, x1, y1 = region
+            if x0 <= point[0] <= x1 and y0 <= point[1] <= y1:
+                return True
+        elif _in_polygon(point, region):
             return True
     return False
+
+
+def _in_polygon(point: Point, ring) -> bool:
+    """Even-odd test; a point on the boundary counts as inside, as on a
+    crossing window's edge."""
+    x, y = point[0], point[1]
+    inside = False
+    n = len(ring)
+    for i in range(n):
+        ax, ay = ring[i]
+        bx, by = ring[(i + 1) % n]
+        if (min(ax, bx) <= x <= max(ax, bx) and min(ay, by) <= y <= max(ay, by)
+                and abs((bx - ax) * (y - ay) - (by - ay) * (x - ax)) <= 1e-9
+                * max(1.0, abs(bx - ax) + abs(by - ay))):
+            return True
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
 
 
 def bulge_of_arc(start_angle: float, end_angle: float) -> float:

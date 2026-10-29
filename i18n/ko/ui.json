@@ -2043,7 +2043,7 @@
   "Open File Location": "파일 위치 열기",
   "Remove objects:": "객체 제거:",
   "*Invalid selection*": "*잘못된 선택*",
-  "Expects a point or Window/Last/Crossing/ALL/Previous/Undo/Add/Remove": "점 또는 윈도우(W)/최종(L)/걸침(C)/모두(ALL)/이전(P)/명령 취소(U)/추가(A)/제거(R)이(가) 필요합니다",
+  "Expects a point or Window/Last/Crossing/ALL/Fence/WPolygon/CPolygon/Previous/Undo/Add/Remove": "점 또는 윈도우(W)/최종(L)/걸침(C)/모두(ALL)/울타리(F)/윈도우 폴리곤(WP)/걸침 폴리곤(CP)/이전(P)/명령 취소(U)/추가(A)/제거(R)이(가) 필요합니다",
   "{count} found": "{count}개 찾음",
   "Everything has been undone": "모두 명령 취소되었습니다",
   "1 was on a locked layer.": "1개는 잠긴 도면층에 있었습니다.",

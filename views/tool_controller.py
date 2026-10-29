@@ -456,6 +456,8 @@ class ToolController(QObject):
         # typed answers at "Select objects:" (_selection_option)
         self._sel_remove = False          # Remove(R) mode until Add(A)
         self._sel_force: Optional[str] = None   # "W"/"C" for the next window
+        #: WPolygon/CPolygon/Fence being drawn: (mode, [vertex, ...])
+        self._sel_poly: Optional[tuple[str, list]] = None
         self._previous_selection: set[str] = set()   # Previous(P)
         self._sel_history: list[set[str]] = []       # Undo(U)
         self._selecting_for: Optional[Tool] = None
@@ -651,6 +653,7 @@ class ToolController(QObject):
                 self._selecting_for = self.tool
                 self._sel_remove = False
                 self._sel_force = None
+                self._sel_poly = None
                 self._sel_history = []
                 self.window.command_line.echo_prompt(self.tool.selection_prompt())
         self.changed.emit()
@@ -943,6 +946,7 @@ class ToolController(QObject):
         self.reset_pick_cycle()
         self.selection = set()
         self._window_anchor = None
+        self._sel_poly = None
         self.changed.emit()
 
     # -- Delete / clipboard (noun-verb: act on the current selection) ----------
@@ -1462,6 +1466,7 @@ class ToolController(QObject):
         self.clear_tracking()
         self._selecting_for = None
         self._window_anchor = None
+        self._sel_poly = None
         self.selection = set()  # command done: highlight goes off
         self._crossing_rects = []
         if self._ghost_on:
@@ -2695,6 +2700,8 @@ class ToolController(QObject):
         """Anchor a selection window (drag start). Idempotent during a drag."""
         if self.space_vp is not None or not self.in_active_viewport(wx, wy):
             return
+        if getattr(self, "_sel_poly", None) is not None:
+            return      # WPolygon/CPolygon/Fence: a press is a vertex
         wx, wy = self.to_space(wx, wy)
         if self._window_anchor is None:
             self._window_anchor = (wx, wy)
@@ -3086,6 +3093,10 @@ class ToolController(QObject):
         # Remove(R) at "Select objects": every pick takes away, as Shift does
         shift = shift or (self._selecting_for is not None
                           and getattr(self, "_sel_remove", False))
+        if self._selecting_for is not None \
+                and getattr(self, "_sel_poly", None) is not None:
+            self._polygon_vertex(wx, wy)
+            return
         force = getattr(self, "_sel_force", None)
         if self._selecting_for is not None and self._window_anchor is not None:
             self._sel_history.append(set(self.selection))   # Undo(U) target
@@ -3147,6 +3158,8 @@ class ToolController(QObject):
         "W": "W", "WINDOW": "W", "V": "W", "VENTANA": "W", "C": "C",
         "CROSSING": "C", "CAPTURA": "C", "R": "R", "REMOVE": "R",
         "E": "R", "ELIMINAR": "R", "A": "A", "ADD": "A", "AÑADIR": "A",
+        "WP": "WP", "WPOLYGON": "WP", "VP": "WP", "CP": "CP",
+        "CPOLYGON": "CP", "F": "F", "FENCE": "F", "BORDE": "F",
     }
 
     def _selection_prompt(self) -> str:
@@ -3160,6 +3173,9 @@ class ToolController(QObject):
         letters, and the Spanish names as an extra. Coordinates answer a
         Window/Crossing corner."""
         echo = self.window.command_line.echo
+        if getattr(self, "_sel_poly", None) is not None:
+            self._polygon_answer(text)
+            return
         option = self._SELECT_OPTIONS.get(text.upper().lstrip("_"))
         document = self.window.document
         if option is None and getattr(self, "_sel_force", None) is not None:
@@ -3173,13 +3189,20 @@ class ToolController(QObject):
                 return
         if option is None or document is None:
             echo(tr("*Invalid selection*"))
-            echo(tr("Expects a point or Window/Last/Crossing/ALL/Previous/Undo/Add/Remove"))
+            echo(tr("Expects a point or Window/Last/Crossing/ALL/Fence/"
+                    "WPolygon/CPolygon/Previous/Undo/Add/Remove"))
             self.window.command_line.echo_prompt(self._selection_prompt())
             return
         if option in ("W", "C"):
             self._sel_force = option
             self._window_anchor = None
             self.window.command_line.echo_prompt(tr("Specify first corner:"))
+            return
+        if option in ("WP", "CP", "F"):
+            self._sel_poly = (option, [])
+            self._sel_force = None
+            self._window_anchor = None
+            self._polygon_prompt()
             return
         if option == "U":
             if self._sel_history:
@@ -3217,6 +3240,88 @@ class ToolController(QObject):
             self._grips_cache = None
             self._echo_count()
         self.window.command_line.echo_prompt(self._selection_prompt())
+
+    # -- WPolygon / CPolygon / Fence at "Select objects:" ----------------------
+    def _polygon_prompt(self) -> None:
+        mode, points = self._sel_poly
+        if mode == "F":
+            text = ("Specify next fence point or [Undo]:" if points
+                    else "Specify first fence point:")
+        else:
+            text = ("Specify endpoint of line or [Undo]:" if points
+                    else "First polygon point:")
+        self.window.command_line.echo_prompt(tr(text))
+
+    def _polygon_answer(self, text: str) -> None:
+        """A typed answer while a polygon or fence is drawn: Undo takes the
+        last vertex back, a coordinate is the next vertex."""
+        mode, points = self._sel_poly
+        if text.upper().lstrip("_") in ("U", "UNDO"):
+            if points:
+                points.pop()
+            self._polygon_prompt()
+            return
+        try:
+            point = parse_point(text, points[-1] if points else None)
+        except CoordinateError as exc:
+            self.window.command_line.echo(tr("Invalid point: {error}", error=exc))
+            point = None
+        if point is None:
+            self._polygon_prompt()
+            return
+        x, y = self.current_ucs().to_world(point.x, point.y)
+        self._polygon_vertex(x, y)
+
+    def _polygon_vertex(self, x: float, y: float) -> None:
+        """One more vertex. WPolygon and CPolygon "cannot cross or touch
+        itself" (SELECT): a point that would make it do so is refused."""
+        from core.select import polygon_is_simple
+
+        mode, points = self._sel_poly
+        if mode != "F" and len(points) >= 2 \
+                and not polygon_is_simple(points + [(x, y)]):
+            self.window.command_line.echo(
+                tr("Invalid point, polygon segments cannot intersect."))
+            self._polygon_prompt()
+            return
+        points.append((x, y))
+        self._polygon_prompt()
+
+    def _close_polygon(self) -> None:
+        """Enter: the polygon closes (the fence ends) and selects --
+        WPolygon what lies fully inside, CPolygon what is inside or
+        crosses, Fence what it crosses -- then "Select objects:" again."""
+        mode, points = self._sel_poly
+        self._sel_poly = None
+        if self.index is None and self.window.document is not None:
+            self.index = GeometryIndex(self.window.document)
+        if self.index is not None and len(points) >= (2 if mode == "F" else 3):
+            query = {"WP": self.index.window_polygon,
+                     "CP": self.index.crossing_polygon,
+                     "F": self.index.fence}[mode]
+            hits = self._shown(query(points))
+            self._sel_history.append(set(self.selection))   # Undo(U) target
+            if getattr(self, "_sel_remove", False):
+                self.selection -= self._with_groups(hits)
+            else:
+                if mode == "CP":
+                    # STRETCH moves what the polygon caught, as a crossing
+                    self._crossing_rects.append(tuple(points))
+                self.selection |= self._filtered(self._with_groups(hits))
+            self._highlight_cache = None
+            self._grips_cache = None
+            self._echo_count()
+        self.window.command_line.echo_prompt(self._selection_prompt())
+
+    def selection_polygon(self):
+        """(mode, vertices + cursor) while a WPolygon, CPolygon or Fence is
+        drawn, for the rubber band; None otherwise."""
+        poly = getattr(self, "_sel_poly", None)
+        if poly is None or not poly[1]:
+            return None
+        mode, points = poly
+        tail = [] if self._cursor is None else [tuple(self._cursor)]
+        return mode, list(points) + tail
 
     def _filtered(self, handles) -> set:
         """What the selection filter lets in; says how many it kept out,
@@ -3296,7 +3401,8 @@ class ToolController(QObject):
         ax, ay = self._window_anchor
         wx, wy = self._cursor
         rect = (min(ax, wx), min(ay, wy), max(ax, wx), max(ay, wy))
-        return rect, wx < ax
+        force = getattr(self, "_sel_force", None)
+        return rect, (wx < ax if force is None else force == "C")
 
     def finish_selection(self) -> None:
         """Enter during a tool's 'Select objects' phase."""
@@ -3308,6 +3414,7 @@ class ToolController(QObject):
         self._window_anchor = None
         self._sel_remove = False
         self._sel_force = None
+        self._sel_poly = None
         self._previous_selection = set(self.selection)
         entities = self._unlocked_for(tool, entities)
         # keep the highlight while the command runs (AutoCAD behavior)
@@ -3437,6 +3544,10 @@ class ToolController(QObject):
     def on_text(self, text: str) -> bool:
         """Prompt input while a tool is active. True if consumed."""
         if self._selecting_for is not None:
+            if not text.strip() and getattr(self, "_sel_poly", None) is not None:
+                self._close_polygon()
+                self.changed.emit()
+                return True
             if not text.strip():
                 self.finish_selection()
                 return True

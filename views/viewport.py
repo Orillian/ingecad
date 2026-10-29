@@ -1818,6 +1818,23 @@ class Viewport(QOpenGLWidget):
             p.fillRect(sx1, sy1, sx2 - sx1, sy2 - sy1, fill)
             p.setPen(QPen(border, 1, Qt.DashLine if crossing else Qt.SolidLine))
             p.drawRect(sx1, sy1, sx2 - sx1, sy2 - sy1)
+        poly_info = getattr(delegate, "selection_polygon", lambda: None)()
+        if poly_info is not None:
+            # WPolygon solid in the window colours, CPolygon dashed in the
+            # crossing ones, closed at all times (SELECT); Fence an open
+            # dashed line
+            mode, points = poly_info
+            shape = QPolygonF([QPointF(*self._space_to_screen(x, y))
+                               for x, y in points])
+            crossing = mode != "WP"
+            border = self.CROSSING_BORDER if crossing else self.WINDOW_BORDER
+            p.setPen(QPen(border, 1, Qt.DashLine if crossing else Qt.SolidLine))
+            if mode == "F":
+                p.drawPolyline(shape)
+            else:
+                p.setBrush(self.CROSSING_FILL if crossing else self.WINDOW_FILL)
+                p.drawPolygon(shape)
+                p.setBrush(Qt.NoBrush)
 
     def _renders_previews(self) -> bool:
         """Does the active tool hand over rendered previews? Then the

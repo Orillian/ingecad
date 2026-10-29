@@ -2265,5 +2265,8 @@
   "Center, Start, End": "Centro, inicio, fin",
   "Center, Start, Angle": "Centro, inicio, ángulo",
   "Center, Start, Length": "Centro, inicio, longitud",
-  "*Invalid*": "*No válido*"
+  "*Invalid*": "*No válido*",
+  "Specify second extension line origin or [Select/Undo] <Select>:": "Precise el origen de la segunda línea de referencia o [Seleccionar(S)/desHacer(U)] <Seleccionar>:",
+  "Non-associative dimension created.": "Se ha creado una cota no asociativa.",
+  "Dimension text = {text}": "Texto de cota = {text}"
 }

@@ -23,6 +23,24 @@ from tools.base import Point, Tool
 _LAST_DIM: list = [None]
 
 
+def report_dimension(ctx, cmd) -> None:
+    """What AutoCAD says after placing a linear dimension, recorded side by
+    side: "Non-associative dimension created." when no point was tied to
+    an object, then "Dimension text = 100"."""
+    dim = getattr(cmd, "dim", None)
+    if dim is None:
+        return
+    from core.dim_commands import measurement_text
+
+    if not getattr(cmd, "associate", None):
+        ctx.echo(tr("Non-associative dimension created."))
+    try:
+        text = measurement_text(dim, dim.get_measurement())
+    except Exception:                          # noqa: BLE001 - no number
+        return
+    ctx.echo(tr("Dimension text = {text}", text=text))
+
+
 def set_last_dimension(dim) -> None:
     _LAST_DIM[0] = dim
 
@@ -358,6 +376,7 @@ class _TwoPointDim(_DimTextMixin, Tool):
             self.ctx.execute(cmd)
             if cmd.dim is not None and (cmd.dim.dxf.dimtype & 15) in (0, 1):
                 set_last_dimension(cmd.dim)
+                report_dimension(self.ctx, cmd)
             self.ctx.finish()
 
     def _tie(self, bit: int, point: Point) -> None:
@@ -1024,6 +1043,11 @@ class _ChainDim(Tool):
             self.prompt(self._chain_prompt())
 
     def _chain_prompt(self) -> str:
+        if not self.BASELINE:
+            # AutoCAD 2026's own words, recorded side by side (the printed
+            # reference still has the older "a second ... [Undo/Select]")
+            return ("Specify second extension line origin or "
+                    "[Select/Undo] <Select>:")
         return ("Specify a second extension line origin or "
                 "[Undo/Select] <Select>:")
 
@@ -1105,6 +1129,7 @@ class _ChainDim(Tool):
         self._stack.append((self._base, self._prev_location))
         self.ctx.execute(cmd)
         set_last_dimension(cmd.dim)
+        report_dimension(self.ctx, cmd)
         if self.BASELINE:
             self._prev_location = location
         else:

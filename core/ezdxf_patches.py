@@ -46,6 +46,7 @@ def apply() -> None:
     _patch_two_line_angular_sector()
     _patch_three_point_angular_sector()
     _patch_angular_extension_from_vertex()
+    _patch_angular_text_above_reading()
     _patch_arc_length_symbol_text()
     _patch_dms_angular_text()
     _patch_linetype_dots()
@@ -529,6 +530,41 @@ def _patch_two_line_angular_sector() -> None:
     get_ext1_dir._ingecad_patch = True
     AngularDimension.get_ext1_dir = get_ext1_dir
     AngularDimension.get_ext2_dir = get_ext2_dir
+
+
+def _patch_angular_text_above_reading() -> None:
+    """Angular text sits above its arc as it is read (ISO 129-1, fig. 63).
+
+    The text of an angle is turned to read from the bottom or the right of
+    the sheet, and lies ABOVE the dimension line in that reading: outside
+    the arc in the upper half, inside it -- towards the centre -- in the
+    lower half. ezdxf put it outside always, so in the lower half it read
+    below its line: the 81,76 of Rafael's part (eighth review, min 50).
+    A centred text (DIMTAD 0) and a text too wide for its arc, set past the
+    extension lines, keep ezdxf's place.
+    """
+    from ezdxf.math import Vec2
+    from ezdxf.render.dim_curved import _CurvedDimensionLine
+    from ezdxf.tools.text import is_upside_down_text_angle
+
+    original = _CurvedDimensionLine.default_location
+    if getattr(original, "_ingecad_patch", False):
+        return
+
+    def default_location(self, shift: float = 0.0):
+        m = self.measurement
+        if shift == 0.0 and m.text_valign != 0 \
+                and not self.geometry.requires_extrusion:
+            radial = Vec2.from_angle(self.center_angle_rad)
+            reading = radial.orthogonal(ccw=False).angle_deg
+            if is_upside_down_text_angle(
+                    self.geometry.ucs.to_ocs_angle_deg(reading)):
+                radius = self.dim_line_radius - m.text_vertical_distance()
+                return self.center_of_arc + radial * radius
+        return original(self, shift)
+
+    default_location._ingecad_patch = True
+    _CurvedDimensionLine.default_location = default_location
 
 
 def _patch_angular_extension_from_vertex() -> None:

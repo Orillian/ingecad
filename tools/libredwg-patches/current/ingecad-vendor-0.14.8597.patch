@@ -2850,3 +2850,33 @@ diff --git a/src/in_dxf.c b/src/in_dxf.c
  
  // starts with 71 . 0
  // returns NULL on success
+diff --git a/src/in_dxf.c b/src/in_dxf.c
+--- a/src/in_dxf.c
++++ b/src/in_dxf.c
+@@ -10788,6 +10788,26 @@
+                       strcpy (name, obj->name);
+                       LOG_TRACE ("change type to %s\n", name);
+                     }
++                  else if (strEQc (subclass, "AcDbAlignedDimension")
++                           && obj->tio.entity->tio.DIMENSION_ANG2LN->flag
++                           && (obj->tio.entity->tio.DIMENSION_ANG2LN->flag
++                               & 7)
++                                  == 0)
++                    {
++                      // The flag (70) came first: type 0 is a rotated,
++                      // horizontal or vertical dimension. Its rotation (50)
++                      // comes before the AcDbRotatedDimension marker, so
++                      // waiting for the marker read it as an aligned
++                      // dimension's oblique_angle and left dim_rotation 0.
++                      // A flag of 0 is no flag at all (bit 5 is always set
++                      // since r13): the dimensions the add API creates are
++                      // written without one, and keep the old path.
++                      obj->type = obj->fixedtype = DWG_TYPE_DIMENSION_LINEAR;
++                      obj->name = (char *)"DIMENSION_LINEAR";
++                      obj->dxfname = strdup (obj->name);
++                      strcpy (name, obj->name);
++                      LOG_TRACE ("change type to %s\n", name);
++                    }
+                   else if (strEQc (subclass, "AcDbAlignedDimension"))
+                     {
+                       // could be DIMENSION_LINEAR also. changed later on those

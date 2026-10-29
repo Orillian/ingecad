@@ -821,6 +821,18 @@ class ToolController(QObject):
                       & (circ_arr[:, 0] + circ_arr[:, 2] >= x0)
                       & (circ_arr[:, 1] - circ_arr[:, 2] <= y1)
                       & (circ_arr[:, 1] + circ_arr[:, 2] >= y0))
+        if handles is None:
+            # "Enter selects all" means all that is on screen: a layer that
+            # is off or frozen (construction lines put away) cut the outline
+            # it was hidden behind, which a pick or a window never takes
+            oids = np.unique(np.concatenate(
+                (self.index._seg_oidx[smask], self.index._circle_oidx[cmask])))
+            owners = self.index._owners
+            shown = set(self._shown([owners[i] for i in oids]))
+            gone = [i for i in oids if owners[i] not in shown]
+            if gone:
+                smask &= ~np.isin(self.index._seg_oidx, gone)
+                cmask &= ~np.isin(self.index._circle_oidx, gone)
         segs = [tuple(s) for s in seg_arr[smask]]
         # (center, r, a0, a1): arcs cut/bound only along their real sweep
         circles = [((c[0], c[1]), c[2], c[4], c[5]) for c in circ_arr[cmask]]

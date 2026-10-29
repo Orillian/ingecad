@@ -41,6 +41,7 @@ def apply() -> None:
     _patch_underscored_arrow_names()
     _patch_suppressed_dimension_line_arrows()
     _patch_narrow_linear_dimension_text()
+    _patch_narrow_linear_dimension_arrows()
     _patch_two_line_angular_sector()
     _patch_three_point_angular_sector()
     _patch_arc_length_symbol_text()
@@ -393,6 +394,50 @@ def _patch_narrow_linear_dimension_text() -> None:
     LinearDimension.default_text_location = default_text_location
     LinearDimension.add_arrow_extension_lines = add_arrow_extension_lines
     LinearDimension.add_dimension_line = add_dimension_line
+
+
+def _patch_narrow_linear_dimension_arrows() -> None:
+    """Text that does not fit takes the arrowheads outside with it.
+
+    Rafael's eighth review (min 17:15, a 2.56 of his part): between the
+    width two arrowheads need and the width the text needs, ezdxf kept the
+    arrowheads inside and set the text beside -- "una distancia muy
+    específica" where his dimensions turned their arrows in while the
+    narrower and wider ones did not. The drafting norm he teaches puts both
+    outside when the text goes out; Marco chose the same rule for radii
+    (#67). AutoCAD's "best fit" may keep them in, so this is a deliberate
+    deviation, for DIMATFIT 3 (best fit) and 0 (text and arrows together).
+    DIMATFIT 2 (move the text first), a forced-inside text (DIMTIX) and
+    suppressed outside arrowheads (DIMSOXD) keep ezdxf's rule.
+
+    ezdxf decides the arrows before the text, so the answer is a property
+    read when the layout asks, after both are known.
+    """
+    from ezdxf.render.dim_linear import LinearDimension
+
+    if isinstance(LinearDimension.__dict__.get("arrows_outside"), property):
+        return
+
+    def get(self) -> bool:
+        raw = self.__dict__.get("_ingecad_arrows_outside", False)
+        if raw:
+            return True
+        m = getattr(self, "measurement", None)
+        if m is None or not m.text or not m.text_is_outside \
+                or m.force_text_inside:
+            return False
+        style = self.dim_style.get
+        try:
+            rule = int(style("dimatfit", 3))
+            soxd = int(style("dimsoxd", 0) or 0)
+        except (TypeError, ValueError):
+            return False
+        return rule in (0, 3) and not soxd
+
+    def set_(self, value: bool) -> None:
+        self.__dict__["_ingecad_arrows_outside"] = bool(value)
+
+    LinearDimension.arrows_outside = property(get, set_)
 
 
 def _patch_two_line_angular_sector() -> None:

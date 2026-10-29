@@ -567,6 +567,8 @@ class OffsetTool(Tool):
             return type(self).distance
         if entity.dxftype() in ("LWPOLYLINE", "POLYLINE"):
             return _distance_to_polyline(entity, side) or None
+        if entity.dxftype() in ("XLINE", "RAY"):
+            return abs(_line_side(entity, side)) or None
         if entity.dxftype() == "LINE":
             seg = (entity.dxf.start.x, entity.dxf.start.y,
                    entity.dxf.end.x, entity.dxf.end.y)
@@ -617,7 +619,22 @@ class OffsetTool(Tool):
             if type(self).erase_source:
                 self.ctx.execute(actions.EraseCommand([entity]))
             return
-        if kind == "LINE":
+        if kind in ("XLINE", "RAY"):
+            # A construction line offsets to a parallel one of its own kind,
+            # through the same direction (Rafael's eighth review, 5:20).
+            base, unit = entity.dxf.start, entity.dxf.unit_vector
+            length = math.hypot(unit.x, unit.y)
+            sign = 1.0 if _line_side(entity, side) >= 0 else -1.0
+            nx, ny = -unit.y / length, unit.x / length
+            start = (base.x + sign * distance * nx,
+                     base.y + sign * distance * ny, base.z)
+            add = "add_xline" if kind == "XLINE" else "add_ray"
+            command = actions.AddEntityCommand(
+                "OFFSET",
+                lambda msp, s=start, u=tuple(unit), a=attribs, f=add: carry_body(
+                    getattr(msp, f)(s, u, dxfattribs=dict(a)), entity),
+                layer=layer)
+        elif kind == "LINE":
             seg = (entity.dxf.start.x, entity.dxf.start.y,
                    entity.dxf.end.x, entity.dxf.end.y)
             n = editmath.offset_line(seg, distance, side)
@@ -668,7 +685,18 @@ class OffsetTool(Tool):
         return keep
 
 
-_OFFSETTABLE = ("LINE", "CIRCLE", "ARC", "LWPOLYLINE", "POLYLINE")
+_OFFSETTABLE = ("LINE", "CIRCLE", "ARC", "LWPOLYLINE", "POLYLINE",
+                "XLINE", "RAY")
+
+
+def _line_side(entity, point: Point) -> float:
+    """Signed distance from an XLINE or RAY's line to ``point``: positive
+    to the left of its direction."""
+    base, unit = entity.dxf.start, entity.dxf.unit_vector
+    length = math.hypot(unit.x, unit.y)
+    if length < 1e-12:
+        return 0.0
+    return ((point[0] - base.x) * -unit.y + (point[1] - base.y) * unit.x) / length
 
 
 def _polyline_rows(entity):

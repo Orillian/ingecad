@@ -96,6 +96,34 @@ def test_an_xline_has_no_endpoint_and_no_midpoint(win):
     assert _hover(win, 0.1, 0.1, {"END", "MID"}) is None
 
 
+def test_offset_steps_an_xline_out_to_a_parallel_xline(win):
+    from tools.edit import OffsetTool
+
+    OffsetTool.erase_source = False
+    OffsetTool.layer_mode = "source"
+    win.tools._execute(actions.add_xline((0, 0), 90.0))
+    _type(win, "OFFSET", "29.5", "0,40", "10,0", "")
+    xlines = win.document.modelspace().query("XLINE")
+    assert len(xlines) == 2, win.command_line.history.toPlainText()[-300:]
+    new = xlines[-1]
+    assert new.dxf.start.x == pytest.approx(29.5)
+    assert (new.dxf.unit_vector.x, new.dxf.unit_vector.y) == pytest.approx((0, 1))
+    win.history.undo()
+    assert len(win.document.modelspace().query("XLINE")) == 1
+
+
+def test_offset_through_a_point_keeps_a_ray_a_ray(win):
+    from tools.edit import OffsetTool
+
+    OffsetTool.erase_source = False
+    OffsetTool.layer_mode = "source"
+    win.tools._execute(actions.add_ray((0, 0), 0.0))
+    _type(win, "OFFSET", "T", "20,0", "7,-12", "")
+    rays = win.document.modelspace().query("RAY")
+    assert len(rays) == 2, win.command_line.history.toPlainText()[-300:]
+    assert (rays[-1].dxf.start.x, rays[-1].dxf.start.y) == pytest.approx((0, -12))
+
+
 def test_parallel_takes_an_xline_direction(win):
     from core.snap import SnapEngine
 

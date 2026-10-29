@@ -51,10 +51,14 @@ import numpy as np
 
 from core import ocs
 
-# Lower = wins when within threshold.
+# Breaks a tie between snaps as near the cursor (lower wins); the nearest
+# point wins first (SnapEngine.find).
 PRIORITY = {"END": 0, "INT": 1, "MID": 2, "CEN": 3, "GCE": 4, "NOD": 5,
             "ORI": 6, "QUA": 7, "INS": 8, "PER": 9, "TAN": 10, "DTAN": 10,
             "NEA": 11}
+#: Snaps that sit on the object rather than at a point of it: they wait
+#: until no point snap is in reach.
+DEFERRED = frozenset(("PER", "TAN", "DTAN", "NEA"))
 #: Every snap a drawing's geometry offers. The origin (ORI) is not one of
 #: them: it is a point no entity owns, offered only when the user ticks it.
 ALL_KINDS = frozenset(k for k in PRIORITY if k not in ("ORI", "DTAN"))
@@ -930,10 +934,10 @@ class SnapEngine:
         if self._dirty:
             self._build()
         cx, cy = cursor
-        best: Optional[tuple[int, float, SnapHit]] = None
+        best: Optional[tuple[tuple, float, SnapHit]] = None
 
         def offer(kind: str, x: float, y: float, circle=None,
-                  reach: Optional[float] = None) -> None:
+                  reach: Optional[float] = None, tier: int = 0) -> None:
             """``reach``: how far the cursor is from what it points at, when
             that is not the snap point itself (PER: the object, not the
             foot)."""
@@ -941,9 +945,13 @@ class SnapEngine:
             d = math.hypot(x - cx, y - cy) if reach is None else reach
             if d > threshold:
                 return
-            key = (PRIORITY[kind], d)
-            if best is None or key < (best[0], best[1]):
-                best = (PRIORITY[kind], d, SnapHit(x, y, kind, circle=circle))
+            # A point the cursor is nearer to wins, whatever its kind: an END
+            # 10 px away beat an INT under the cursor, and a 1 mm slot was
+            # drawn with zero-length lines. PER, TAN and NEA only when no
+            # point is in reach; the kind's rank breaks a tie.
+            key = (2 if kind in DEFERRED else tier, d, PRIORITY[kind])
+            if best is None or key < best[0]:
+                best = (key, d, SnapHit(x, y, kind, circle=circle))
 
         circles, arcs, points = self._circles, self._arcs, self._points
 
@@ -1032,11 +1040,23 @@ class SnapEngine:
             i = int(np.argmin(d2))
             offer("MID", float(mx[i]), float(my[i]))
         if "CEN" in kinds:
-            for arr in (circles, arcs):
+            for arr, full in ((circles, True), (arcs, False)):
                 if len(arr):
                     d2 = (arr[:, 0] - cx) ** 2 + (arr[:, 1] - cy) ** 2
                     i = int(np.argmin(d2))
                     offer("CEN", float(arr[i, 0]), float(arr[i, 1]))
+                    # and from the curve itself, as AutoCAD's aperture finds
+                    # it: a cursor passing over an arc took no snap at all
+                    off = np.abs(np.sqrt(d2) - arr[:, 2])
+                    for j in np.nonzero(off <= threshold)[0]:
+                        if not full and not _angle_in_sweep(
+                                math.atan2(cy - arr[j, 1], cx - arr[j, 0]),
+                                arr[j, 3], arr[j, 4]):
+                            continue
+                        # behind the points ON the curve (its ends,
+                        # quadrants...), ahead of NEA on that same curve
+                        offer("CEN", float(arr[j, 0]), float(arr[j, 1]),
+                              reach=float(off[j]), tier=1)
         offer_targets("CEN")
         offer_targets("GCE")
         offer_targets("INS")

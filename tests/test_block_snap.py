@@ -109,3 +109,41 @@ def test_the_drawing_snaps_inside_a_block_from_the_canvas(qapp):
     finally:
         win.document.dirty = False
         win.close()
+
+
+def test_blocks_added_to_a_built_cache_match_a_fresh_build():
+    """A paste files its block references into the live cache as arrays,
+    as a full build does (a Ctrl+V of Plaza Yanque froze 0.95 s turning
+    170 000 block segments into Python lists and back) -- with the same
+    rows and owners a rebuild gives."""
+    import numpy as np
+
+    document, msp = _drawing()
+    msp.add_line((50, 50), (60, 50))
+    engine = SnapEngine(document)
+    engine._build()
+    added = [msp.add_blockref("PIEZA", (20, 0), dxfattribs={"rotation": 30}),
+             msp.add_blockref("PIEZA", (40, 5)),
+             msp.add_circle((70, 70), 1)]
+    emitted = []
+    real_emit = engine._emit
+
+    def emit(key, rows, oid, values, owners):
+        if not engine._block_stack:     # not a block's own, cached once
+            emitted.append(engine._chunks is not None)   # kept as an array?
+        real_emit(key, rows, oid, values, owners)
+    engine._emit = emit
+    engine.add_entities(added)
+    assert emitted and all(emitted)
+    fresh = SnapEngine(document)
+    fresh._build()
+    for rows, oidx in SnapEngine._ARRAYS.values():
+        names = [fresh._owners[i] for i in getattr(fresh, oidx)]
+        got = [engine._owners[i] for i in getattr(engine, oidx)]
+        order_a = sorted(zip(map(tuple, getattr(fresh, rows).round(9)), names))
+        order_b = sorted(zip(map(tuple, getattr(engine, rows).round(9)), got))
+        assert order_a == order_b, rows
+    assert len(engine._seg_bounds) == len(engine._segs)
+    assert _find(engine, 50.1, 4.9, "END") == (50, 5)
+    assert engine._chunks is None
+    assert np.asarray(engine._segs).dtype == np.float64

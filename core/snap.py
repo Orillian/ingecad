@@ -620,6 +620,13 @@ class SnapEngine:
             self._emit("arcs", moved, oid, arcs, arc_o)
 
     _CHUNK_KEYS = ("segs", "circles", "arcs", "points", "curves", "targets")
+    #: chunk key -> (rows attribute, owner-index attribute)
+    _ARRAYS = {"segs": ("_segs", "_seg_oidx"),
+               "circles": ("_circles", "_circle_oidx"),
+               "arcs": ("_arcs", "_arc_oidx"),
+               "points": ("_points", "_point_oidx"),
+               "curves": ("_curves", "_curve_oidx"),
+               "targets": ("_targets", "_target_oidx")}
 
     def _emit(self, key, rows, oid, values, owners) -> None:
         """A transformed block's rows: kept as one array while a build
@@ -705,6 +712,16 @@ class SnapEngine:
         """
         if self._dirty:
             return
+        # a block's transformed rows stay arrays, as in _build: turning a
+        # pasted plan's 170 000 block segments into Python lists and back
+        # froze a Ctrl+V 0.95 s on Plaza Yanque (0.3 s now)
+        self._chunks = {key: [] for key in self._CHUNK_KEYS}
+        try:
+            self._add_entities(entities)
+        finally:
+            self._chunks = None
+
+    def _add_entities(self, entities) -> None:
         segs: list = []
         seg_o: list = []
         circles: list = []
@@ -738,43 +755,24 @@ class SnapEngine:
                 [self._lines, np.asarray(lines, dtype=np.float64).reshape(-1, 5)])
             self._line_oidx = np.concatenate(
                 [self._line_oidx, np.asarray(line_o, dtype=np.int32)])
-        if segs:
-            new = np.asarray(segs, dtype=np.float64).reshape(-1, 4)
-            self._segs = np.vstack([self._segs, new])
-            self._seg_oidx = np.concatenate(
-                [self._seg_oidx, np.asarray(seg_o, dtype=np.int32)])
-            self._seg_bounds = np.vstack(
-                [self._seg_bounds, self._seg_bounds_of(new)])
-        if circles:
-            self._circles = np.vstack(
-                [self._circles,
-                 np.asarray(circles, dtype=np.float64).reshape(-1, 3)])
-            self._circle_oidx = np.concatenate(
-                [self._circle_oidx, np.asarray(circle_o, dtype=np.int32)])
-        if arcs:
-            self._arcs = np.vstack(
-                [self._arcs, np.asarray(arcs, dtype=np.float64).reshape(-1, 5)])
-            self._arc_oidx = np.concatenate(
-                [self._arc_oidx, np.asarray(arc_o, dtype=np.int32)])
-        if points:
-            self._points = np.vstack(
-                [self._points,
-                 np.asarray(points, dtype=np.float64).reshape(-1, 2)])
-            self._point_oidx = np.concatenate(
-                [self._point_oidx, np.asarray(point_o, dtype=np.int32)])
-        if curves:
-            new = np.asarray(curves, dtype=np.float64).reshape(-1, 4)
-            self._curves = np.vstack([self._curves, new])
-            self._curve_oidx = np.concatenate(
-                [self._curve_oidx, np.asarray(curve_o, dtype=np.int32)])
-            self._curve_bounds = np.vstack(
-                [self._curve_bounds, self._seg_bounds_of(new)])
-        if targets:
-            self._targets = np.vstack(
-                [self._targets,
-                 np.asarray(targets, dtype=np.float64).reshape(-1, 3)])
-            self._target_oidx = np.concatenate(
-                [self._target_oidx, np.asarray(target_o, dtype=np.int32)])
+        for key, values, owners, width in (
+                ("segs", segs, seg_o, 4), ("circles", circles, circle_o, 3),
+                ("arcs", arcs, arc_o, 5), ("points", points, point_o, 2),
+                ("curves", curves, curve_o, 4),
+                ("targets", targets, target_o, 3)):
+            new, oidx = self._merged(key, values, owners, width)
+            if not len(new):
+                continue
+            rows_name, oidx_name = self._ARRAYS[key]
+            setattr(self, rows_name, np.vstack([getattr(self, rows_name), new]))
+            setattr(self, oidx_name,
+                    np.concatenate([getattr(self, oidx_name), oidx]))
+            if key == "segs":
+                self._seg_bounds = np.vstack(
+                    [self._seg_bounds, self._seg_bounds_of(new)])
+            elif key == "curves":
+                self._curve_bounds = np.vstack(
+                    [self._curve_bounds, self._seg_bounds_of(new)])
 
     def translate_handles(self, handles, dx: float, dy: float) -> None:
         """Shift the cached geometry of MOVEd entities in place.

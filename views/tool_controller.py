@@ -1625,7 +1625,11 @@ class ToolController(QObject):
                      actions.SetPropertyCommand, actions.ReplaceEntitiesCommand,
                      actions.CreateBlockCommand, actions.ExplodeCommand,
                      actions.DimGripCommand, actions.DimTextTranslateCommand,
-                     actions.DimTextEditCommand)
+                     actions.DimTextEditCommand,
+                     # missing, the old picture of a dimension read from
+                     # the file stayed beside the moved one until a full
+                     # regen (Rafael's eighth review, min 15:57)
+                     actions.DimTextWithLineCommand)
 
     @classmethod
     def _patchable(cls, command) -> bool:

@@ -1153,7 +1153,8 @@ def _patch_radial_dimension_layout() -> None:
       past it (one arrowhead length past its tail: 5 mm with ISO-25) -- a
       line cut at the arrow "as with a knife" reads wrong;
     * the text fits inside: arrowheads inside, the text on the dimension
-      line, no extension of any kind; a diameter spans the whole circle.
+      line, no extension of any kind; a diameter spans the whole circle and
+      a radius starts at the centre (not at its text, as ezdxf drew it).
 
     ezdxf 1.4 draws the outside case with the arrowheads inside (or one in,
     one out), and a diameter with its text placed inside as a single leader
@@ -1201,6 +1202,20 @@ def _patch_radial_dimension_layout() -> None:
             base = self.add_arrow(self.point_on_circle, rotate=True)  # outside, to the centre
         self.add_radial_dim_line(self.point_on_circle)
         ext_line(self, base, user)
+
+    radius_from_text = RadiusDimension.add_radial_dim_line_from_text
+
+    def radial_dim_line_from_text(self, start, end) -> None:
+        """Text inside the circle: the line starts at the centre, ISO 129's
+        rule (Rafael's eighth review, min 18-20) -- ezdxf drew it from the
+        text, like a leader. With DIMTOFL off (the imperial Standard style)
+        ezdxf's own path stands."""
+        if self.outside_text_force_dimline:
+            self.add_radial_dim_line(end)
+        else:
+            radius_from_text(self, start, end)
+
+    RadiusDimension.add_radial_dim_line_from_text = radial_dim_line_from_text
 
     def render_user_location_radius(self) -> None:
         if iso_case(self):

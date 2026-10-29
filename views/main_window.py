@@ -430,6 +430,7 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self._build_command_line()
         self._build_sidebar()
         self._build_toolbars()
+        self._restore_toolbars()
         self.plugins.activate_enabled()
         self.viewport.cursorMoved.connect(self._on_cursor_moved)
 
@@ -1942,6 +1943,12 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
             bar.addAction(act)
         self.addToolBar(Qt.TopToolBarArea, bar)
         self._plugin_toolbars[spec.id] = bar
+        # Hidden from the right-click list, it stays hidden: the plugin's own
+        # toolbar setting answers that (Plugins dialog), one place. Later,
+        # not now -- the menu is still using the bar's action.
+        bar.toggleViewAction().triggered.connect(
+            lambda checked, pid=spec.id: QTimer.singleShot(
+                0, lambda: self.plugins.set_toolbar_enabled(pid, checked)))
 
     def remove_toolbar(self, plugin_id: str) -> None:
         bar = self._plugin_toolbars.pop(plugin_id, None)
@@ -3154,6 +3161,31 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         self._build_standard_toolbar()
         self._build_props_toolbar()
         self._build_blockedit_toolbar()
+
+    #: The core toolbars the user can turn off and on (right click on any
+    #: bar); the Block Editor's comes and goes with BEDIT on its own.
+    _USER_TOOLBARS = ("draw_toolbar", "modify_toolbar", "standard_toolbar",
+                      "props_toolbar", "viewports_toolbar",
+                      "dimension_toolbar")
+
+    def _restore_toolbars(self) -> None:
+        """Every core toolbar as the user left it (#107: "they always return
+        when I restart the program"). Only the user's own toggle -- the
+        right-click list -- is remembered: Clean Screen, BEDIT and closing
+        the window hide bars too, and none of them is a choice to keep."""
+        from PySide6.QtWidgets import QToolBar
+
+        settings = QSettings()
+        for name in self._USER_TOOLBARS:
+            bar = self.findChild(QToolBar, name)
+            if bar is None:
+                continue
+            key = f"toolbars/{name}"
+            raw = settings.value(key, None)
+            if raw is not None and str(raw).lower() in ("false", "0", "no"):
+                bar.setVisible(False)
+            bar.toggleViewAction().triggered.connect(
+                lambda checked, k=key: QSettings().setValue(k, bool(checked)))
 
     def _build_standard_toolbar(self) -> None:
         """The classic Standard toolbar, in AutoCAD's own order (the 2011

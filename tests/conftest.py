@@ -73,6 +73,7 @@ def _status_toggles_start_at_defaults():
         settings.remove("statusbar")
         settings.remove("display/grid")
         settings.remove("display/lineweight")
+        settings.remove("toolbars")
     yield
 
 

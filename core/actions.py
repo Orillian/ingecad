@@ -3164,8 +3164,14 @@ def _ellipse_normalize(center, first_axis, other_dist: float):
 def ellipse_from_axis(p1, p2, other_dist: float):
     """Axis endpoints p1,p2 + distance to the other axis -> (center, major, ratio)."""
     center = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
-    first = ((p2[0] - p1[0]) / 2.0, (p2[1] - p1[1]) / 2.0)
-    return _ellipse_normalize(center, first, other_dist)
+    half = ((p2[0] - p1[0]) / 2.0, (p2[1] - p1[1]) / 2.0)
+    if other_dist > math.hypot(*half):
+        # the axes swap; AutoCAD 2026 was not recorded doing this, so the
+        # major axis keeps the side it always had
+        return _ellipse_normalize(center, half, other_dist)
+    # the major axis points at the FIRST endpoint, as AutoCAD 2026 stores
+    # it (group C6): an elliptical arc's angle 0 is that endpoint
+    return _ellipse_normalize(center, (-half[0], -half[1]), other_dist)
 
 
 def ellipse_from_center(center, axis_end, other_dist: float):

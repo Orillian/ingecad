@@ -1,15 +1,76 @@
 # Changelog
 
-## v0.6.9.1 — 2026-10-29
+## v0.7.0 — unreleased
 
-- **TRIM cuts a polyline along itself, from crossing to crossing**: the
-  side of a rectangle inside a circle goes with the whole run up to the
-  next crossing, over its corners, instead of stopping at the corner.
-- **TRIM trims ellipses and elliptical arcs.**
-- **A selected ellipse or spline is highlighted on the curve at any zoom**,
-  no longer as a polygon beside it.
-- **A right click (or Ctrl+J) with a command typed runs that command**,
-  instead of repeating the last one (#110).
+Extensions you install from a catalog with one click, a third bundled
+extension for roads, and the drawing and editing commands polished one by
+one against the classic CAD, prompt by prompt.
+
+### Extensions
+- **Tools ▸ Manage extensions…** (or `PLUGINS`) opens the extension
+  manager in a window of its own: Included, Installed and Available
+  extensions as tiles with a screenshot, in columns that follow the width.
+  Install, Update, Enable/Disable and Uninstall, each with its toolbar
+  switch, and Reviewed / Community / Included badges. A standing notice
+  says an extension is code with the same access as IngeCAD.
+- **The catalog** is `ingelibre/ingecad-extensions`, read the first time
+  the window opens, never at start-up. Every download is checked against
+  its SHA-256 and unpacked safely; offline, installed extensions are still
+  listed and managed, and uninstalling leaves no trace.
+- **The first extension in the catalog: quantities by layer** (lengths,
+  areas and counts per layer, as a table in the drawing).
+- **Roads, a new bundled extension** (Peruvian DG-2018), off until turned
+  on: road axis and stationing (`ROADAXIS`, `STATIONING`, `RESTATION`,
+  `AXISREVERSE`), the axis table (`AXISTABLE`), simple horizontal curves
+  on the tangents with their PC/PT stations (`HCURVES`), and the curve
+  table (`CURVETABLE`).
+
+### Drawing
+- **ARC**: Draw ▸ Arc lists the eleven ways, and the toolbar's Arc is a
+  drop-down. A click answers the included angle, chord and radius
+  prompts; an impossible value says `*Invalid*`; the three-point preview
+  is the arc that will be drawn, not the whole circle.
+- **ELLIPSE**: the major axis points at the first axis endpoint, so an
+  elliptical arc starts where the classic CAD starts it.
+- **AREA by points** offers Arc, Length, Undo and Total; arcs are measured
+  exactly.
+- **BLOCK** onto a name the drawing already has asks "Redefine it?", and
+  the reference it leaves takes the current layer.
+- **A copied or pasted image shows at once**, not after REGEN.
+
+### Editing and selection
+- **WPolygon, CPolygon and Fence at "Select objects:"**; STRETCH stretches
+  by a crossing polygon.
+- **TRIM cuts a polyline from crossing to crossing**, over its corners,
+  and trims ellipses and elliptical arcs. A selected ellipse or spline is
+  highlighted on the curve at any zoom.
+- **ROTATE and SCALE** offer the last angle or factor as the default,
+  and Points at Reference.
+- **FILLET and CHAMFER** offer their settings at the second object too
+  (`[Radius]`, `[Distance/Angle/Method]`); FILLET starts from the
+  drawing's own radius and saves a new one into it.
+- **OFFSET Through refuses a bare number** instead of making the copy
+  somewhere unexpected.
+- **ZOOM** takes Center, All, Scale, `2X`, a bare scale and a typed
+  corner.
+
+### Prompts and messages
+- **Defaults are written at the drawing's precision** (`<25.000>`, not
+  `<25>`) in some sixty prompts.
+- **Text that is not a point** answers "Point or option keyword required.",
+  and at an object prompt "*Invalid selection*" with what it expects.
+- **Every dimension says its text**: radius, diameter and angle now end
+  with "Dimension text = …"; continued and baseline dimensions no longer
+  repeat "Non-associative dimension created.".
+- **A right click (or Ctrl+J) with a command typed runs that command**
+  (#110); Ctrl + right click opens the object snap menu.
+
+### Sheets and the screen
+- **A sheet whose page setup is in metres is drawn and plotted at its
+  scale**, not as a dot in the corner of the page.
+- **The crosshair shows as soon as the pointer enters the drawing**, not
+  on its first move.
+- **The right sidebar shows whole tab names**, with scroll arrows.
 
 ## v0.6.9 — 2026-10-29
 

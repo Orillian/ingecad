@@ -86,10 +86,10 @@
     </screenshot>
   </screenshots>
   <releases>
-    <release version="0.6.9.1" date="2026-10-29">
+    <release version="0.7.0" date="2026-10-29">
       <description>
-        <p>TRIM cuts a polyline from crossing to crossing over its corners, and trims ellipses. A selected ellipse is highlighted on the curve at any zoom. A right click with a command typed runs it.</p>
-        <p xml:lang="es">RECORTA corta una polilínea de cruce a cruce pasando por sus esquinas, y recorta elipses. Una elipse seleccionada se resalta sobre la curva con cualquier zoom. Un clic derecho con una orden tecleada la ejecuta.</p>
+        <p>Extensions: a manager window to install, update and remove them from a catalog with one click, each download verified, and a bundled Roads extension (road axis, stationing, horizontal curves and their tables). Drawing and editing commands polished prompt by prompt: arcs, ellipses, AREA with arcs, polygon and fence selection, TRIM along polylines and on ellipses, ROTATE, SCALE, FILLET, CHAMFER, OFFSET and ZOOM options, defaults at the drawing's precision, and sheets in metres plotted at their scale.</p>
+        <p xml:lang="es">Extensiones: una ventana para instalarlas, actualizarlas y quitarlas desde un catálogo con un clic, cada descarga verificada, y la extensión Carreteras incluida (eje, estacado, curvas horizontales y sus cuadros). Las órdenes de dibujo y edición pulidas pregunta por pregunta: arcos, elipses, ÁREA con arcos, selección por polígono y borde, RECORTA en polilíneas y elipses, opciones de GIRA, ESCALA, EMPALME, CHAFLÁN, DESFASE y ZOOM, valores por defecto con la precisión del dibujo, y láminas en metros trazadas a su escala.</p>
       </description>
     </release>
     <release version="0.6.9" date="2026-10-29">

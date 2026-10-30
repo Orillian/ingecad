@@ -31,7 +31,7 @@ and IngePresupuestos (construction budgeting).
   trim/offset/extend, survey points with elevations, and printing to scale.
   Not a feature-for-feature clone of any other CAD.
 
-## Status — v0.6.9.1
+## Status — v0.7.0
 
 What works today:
 
@@ -45,8 +45,17 @@ What works today:
   the British National Grid is `EPSG:27700` — through PROJ), read or type
   latitude and longitude, ground elevations
   from a global DEM, the satellite image under the plan, and Google Earth
-  both ways by KML/KMZ. Plugins are managed in Tools ▸ Manage extensions; the
-  contract for writing one is in `docs/plugins.md`.
+  both ways by KML/KMZ.
+- **Roads plugin** (menu *Roads*, Peruvian DG-2018): a road axis from a
+  polyline of tangents and arcs, its stationing and axis table, simple
+  horizontal curves at each PI with their PC/PT stations, and the curve
+  table.
+- **Extensions**: Tools ▸ Manage extensions opens a window with the
+  included plugins, the ones you installed and the catalog of
+  [ingecad-extensions](https://github.com/ingelibre/ingecad-extensions),
+  installed with one click (each download checked against its SHA-256)
+  and removed without a trace. The contract for writing one is in
+  `docs/plugins.md`.
 
   ![Topography: the construction chart and contours](docs/images/topografia.jpeg)
 

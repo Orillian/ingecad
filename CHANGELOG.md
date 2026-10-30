@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.7.0 — unreleased
+## v0.7.0 — 2026-10-29
 
 Extensions you install from a catalog with one click, a third bundled
 extension for roads, and the drawing and editing commands polished one by
@@ -71,6 +71,8 @@ one against the classic CAD, prompt by prompt.
 - **The crosshair shows as soon as the pointer enters the drawing**, not
   on its first move.
 - **The right sidebar shows whole tab names**, with scroll arrows.
+- **Closing a window that showed raster images frees their textures at
+  once**, instead of leaving them to a late cleanup that could crash.
 
 ## v0.6.9 — 2026-10-29
 

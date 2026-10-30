@@ -560,8 +560,13 @@ def test_the_catalog_refuses_plain_http_and_old_ingecad(user_dir):
     assert not center.compatible(future)
     with pytest.raises(center.ExtensionError, match="requires IngeCAD"):
         center.install_extension(future, user_dir)
+    from core.version import __version__
+
+    major, minor = (int(n) for n in __version__.split(".")[:2])
     assert center.compatible(center._parse_extension(_entry(data, ingecad="0.6.9")))
-    assert not center.compatible(center._parse_extension(_entry(data, ingecad="0.7")))
+    assert center.compatible(center._parse_extension(_entry(data, ingecad=__version__)))
+    newer = f"{major}.{minor + 1}"           # the next version, whatever this one is
+    assert not center.compatible(center._parse_extension(_entry(data, ingecad=newer)))
 
 
 # -- tiles and their pictures (as IngeTrazo's manager) -----------------------------

@@ -665,8 +665,24 @@ class Viewport(QOpenGLWidget):
         vbo.release()
         return vao, vbo, len(data)
 
+    def release_gl(self) -> None:
+        """Release the GL objects now, while the widget and its context are
+        alive: the window calls it on close. ``aboutToBeDestroyed`` alone
+        came too late -- the context dies with the widget, the slot found
+        the Viewport already deleted, and the textures of raster images
+        were left for the GC, whose destructor then asked a dead context
+        "are we sharing?" (SIGSEGV in QOpenGLContext::shareGroup on CI)."""
+        context = self.context()
+        if context is None or not context.isValid() or self._program is None:
+            return                       # GL never started: nothing to release
+        self._release_gl()
+
     def _release_gl(self) -> None:
         """Destroy every GL object while the context can still say goodbye."""
+        from shiboken6 import isValid
+
+        if not isValid(self):
+            return                       # the widget went first: nothing to do
         self.makeCurrent()
         try:
             holders = [self._scene_bufs, self._paper_bufs,

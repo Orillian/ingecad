@@ -3925,10 +3925,12 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
         """On the resize line between the drawing and the sidebar, centred
         on the drawing's height; at the window's edge when folded -- inside
         the frameless window's resize margin, which would take the click."""
+        from shiboken6 import isValid
+
         btn = getattr(self, "_sidebar_handle", None)
-        if btn is None:
-            return
         view = self.viewport
+        if btn is None or not isValid(view):
+            return                 # a dock hidden by the window's own deletion
         edge = view.mapTo(self, QPoint(view.width(), 0))
         x = edge.x() - btn.width() // 2
         margin = 0 if self.isMaximized() else self.RESIZE_MARGIN
@@ -6558,6 +6560,8 @@ class MainWindow(DocumentTabsMixin, QMainWindow):
             event.ignore()
             return
         self._drain_workers()
+        # GL textures and buffers go while the context is still current-able
+        self.viewport.release_gl()
         # A normal exit leaves nothing behind: what the Drawing Recovery
         # Manager lists is, by definition, what a crash left.
         self._autosave_discard_all()
